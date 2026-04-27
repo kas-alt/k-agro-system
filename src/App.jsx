@@ -83,7 +83,7 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
   const [newTaskDefaultDate, setNewTaskDefaultDate] = useState('');
   const [newTaskDefaultProject, setNewTaskDefaultProject] = useState('');
   
-  // 📌 새 기능: 담당자 클릭 팝업 및 파일 업로드 팝업 상태
+  // 담당자 클릭 팝업 및 파일 업로드 팝업 상태
   const [selectedAssigneeId, setSelectedAssigneeId] = useState(null);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [uploadTargetProject, setUploadTargetProject] = useState('');
@@ -132,8 +132,8 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
     }
   };
 
+  // 📌 상세창 내부의 (기존 데모용) 버튼 처리
   const handleFileUploadMock = (taskId) => {
-    alert('파일이 업로드 되었습니다. (브라우저 저장완료)');
     const newFile = { name: `첨부문서_${Date.now().toString().slice(-4)}.pdf`, uploader: currentUser.name, date: '2026-04-27' };
     const updatedTasks = tasks.map(t => {
       if (t.id === taskId) return { ...t, uploadedFiles: [...(t.uploadedFiles || []), newFile] };
@@ -141,14 +141,15 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
     });
     setTasks(updatedTasks);
     if (selectedTask && selectedTask.id === taskId) setSelectedTask(updatedTasks.find(t => t.id === taskId));
+    alert('파일이 업로드 되었습니다.');
   };
 
-  // 📌 새 기능: 메뉴에서 바로 파일 업로드 처리
+  // 📌 새 기능: 메뉴에서 실제 파일 선택해서 업로드 처리
   const handleUploadFileFromMenu = (taskId, fileName) => {
     const newFile = { name: fileName, uploader: currentUser.name, date: '2026-04-27' };
     setTasks(tasks.map(t => t.id === taskId ? { ...t, uploadedFiles: [...(t.uploadedFiles || []), newFile] } : t));
     setIsUploadingFile(false);
-    alert('자료가 성공적으로 등록되었습니다!');
+    alert(`[${fileName}] 자료가 성공적으로 등록되었습니다!`);
   };
 
   const handleAddTask = (newTaskData) => {
@@ -402,7 +403,7 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                         onClick={() => { setUploadTargetProject(project.id); setIsUploadingFile(true); }}
                         className="text-sm flex items-center gap-1 bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-colors"
                       >
-                        <Upload size={16}/> 자료 추가
+                        <Upload size={16}/> 자료 직접 업로드
                       </button>
                     </div>
 
@@ -427,7 +428,7 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-400 py-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">업로드된 자료가 없습니다.</p>
+                      <p className="text-sm text-gray-400 py-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">업로드된 자료가 없습니다. 우측 상단의 업로드 버튼을 눌러주세요.</p>
                     )}
                   </div>
                 );
@@ -670,9 +671,10 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                 <div>
                    <div className="flex justify-between items-center mb-4">
                     <h4 className="font-bold text-gray-900 text-base flex items-center gap-2"><Upload size={18}/> 결과물 등록</h4>
+                    {/* 데모용 기존 파일 업로드 버튼 */}
                     {canEditTask(selectedTask) && (
                       <button onClick={() => handleFileUploadMock(selectedTask.id)} className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-md hover:bg-emerald-200 font-bold transition-colors">
-                        + 파일 올리기
+                        + 임시 업로드
                       </button>
                     )}
                   </div>
@@ -775,7 +777,7 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
         <AddTaskModal projects={projects} users={MOCK_USERS} currentUser={currentUser} defaultDate={newTaskDefaultDate} defaultProjectId={newTaskDefaultProject} onClose={() => setIsAddingTask(false)} onAdd={handleAddTask} />
       )}
 
-      {/* 📌 모달 3: 자료 업로드 팝업 */}
+      {/* 📌 모달 3: 자료 업로드 팝업 (실제 파일 선택기로 변경) */}
       {isUploadingFile && (
         <UploadFileModal projectId={uploadTargetProject} projects={projects} tasks={tasks} onClose={() => setIsUploadingFile(false)} onUpload={handleUploadFileFromMenu} />
       )}
@@ -783,17 +785,19 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
   );
 }
 
-// 📌 자료 업로드 팝업 컴포넌트
+// 📌 자료 업로드 팝업 컴포넌트 (실제 파일 탐색기 연동)
 function UploadFileModal({ projectId, projects, tasks, onClose, onUpload }) {
   const projTasks = tasks.filter(t => t.projectId === projectId);
   const [taskId, setTaskId] = useState(projTasks.length > 0 ? projTasks[0].id : '');
-  const [fileName, setFileName] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!taskId) return alert('해당 프로젝트에 만들어진 세부 업무가 없습니다. 먼저 [프로젝트 관리]에서 업무를 추가해주세요.');
-    if (!fileName.trim()) return alert('파일 이름을 입력해주세요.');
-    onUpload(taskId, fileName);
+    if (!selectedFile) return alert('업로드할 파일을 선택해주세요.');
+    
+    // 파일 객체에서 파일의 '이름'만 추출해서 넘깁니다.
+    onUpload(taskId, selectedFile.name);
   };
 
   return (
@@ -813,8 +817,15 @@ function UploadFileModal({ projectId, projects, tasks, onClose, onUpload }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">업로드할 파일명 (테스트용)</label>
-            <input required type="text" value={fileName} onChange={e=>setFileName(e.target.value)} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none font-medium" placeholder="예) 상반기_결산_보고서.pdf" />
+            <label className="block text-sm font-bold text-gray-700 mb-2">파일 선택</label>
+            {/* 📌 진짜 파일 선택기(Input type="file") 추가 */}
+            <input 
+              required 
+              type="file" 
+              accept=".pdf,.doc,.docx,.html,.xls,.xlsx,.csv,.ppt,.pptx,.png,.jpg,.jpeg" 
+              onChange={e=>setSelectedFile(e.target.files[0])} 
+              className="w-full border-2 border-gray-200 rounded-xl p-2 focus:ring-2 focus:ring-emerald-500 outline-none font-medium file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer text-gray-600" 
+            />
           </div>
           <div className="pt-4 flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-5 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50">취소</button>
