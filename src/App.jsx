@@ -78,10 +78,16 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
   const [activeMenu, setActiveMenu] = useState('calendar');
   const [selectedTask, setSelectedTask] = useState(null);
   
+  // 모달 상태 관리
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskDefaultDate, setNewTaskDefaultDate] = useState('');
   const [newTaskDefaultProject, setNewTaskDefaultProject] = useState('');
   
+  // 📌 새 기능: 담당자 클릭 팝업 및 파일 업로드 팝업 상태
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [uploadTargetProject, setUploadTargetProject] = useState('');
+
   const [calendarDate, setCalendarDate] = useState(new Date('2026-04-27'));
   const TODAY = new Date('2026-04-27');
 
@@ -110,7 +116,7 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
   const allComments = projectTasks.flatMap(t => t.comments?.map(c => ({ ...c, taskTitle: t.title, taskId: t.id })) || []);
   
   const assigneeStats = MOCK_USERS.map(user => {
-    const userTasks = projectTasks.filter(t => t.assigneeId === user.id);
+    const userTasks = tasks.filter(t => t.assigneeId === user.id); // 전체 프로젝트 기준으로 변경
     return {
       user,
       total: userTasks.length,
@@ -135,6 +141,14 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
     });
     setTasks(updatedTasks);
     if (selectedTask && selectedTask.id === taskId) setSelectedTask(updatedTasks.find(t => t.id === taskId));
+  };
+
+  // 📌 새 기능: 메뉴에서 바로 파일 업로드 처리
+  const handleUploadFileFromMenu = (taskId, fileName) => {
+    const newFile = { name: fileName, uploader: currentUser.name, date: '2026-04-27' };
+    setTasks(tasks.map(t => t.id === taskId ? { ...t, uploadedFiles: [...(t.uploadedFiles || []), newFile] } : t));
+    setIsUploadingFile(false);
+    alert('자료가 성공적으로 등록되었습니다!');
   };
 
   const handleAddTask = (newTaskData) => {
@@ -185,7 +199,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col">
         <div className="p-6 bg-slate-950">
-          {/* 여행가방(Briefcase) 아이콘 제거, 디자인 크기 원상복구 */}
           <h1 className="text-emerald-500 font-extrabold text-xl flex items-center justify-center gap-2 mb-6 tracking-tight">
             (주)케이아그로솔루션즈
           </h1>
@@ -379,10 +392,20 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                 
                 return (
                   <div key={project.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                    <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
-                      {project.name}
-                      <span className="text-sm font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{pFiles.length}건</span>
-                    </h3>
+                    <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
+                      <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+                        {project.name}
+                        <span className="text-sm font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{pFiles.length}건</span>
+                      </h3>
+                      {/* 📌 파일 직접 추가 버튼 */}
+                      <button
+                        onClick={() => { setUploadTargetProject(project.id); setIsUploadingFile(true); }}
+                        className="text-sm flex items-center gap-1 bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-colors"
+                      >
+                        <Upload size={16}/> 자료 추가
+                      </button>
+                    </div>
+
                     {pFiles.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {pFiles.map((file, idx) => (
@@ -438,7 +461,11 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
           {activeMenu === 'assignees' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {assigneeStats.map((stat, idx) => (
-                <div key={idx} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <div 
+                  key={idx} 
+                  className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all group relative"
+                  onClick={() => setSelectedAssigneeId(stat.user.id)}
+                >
                   <div className="flex items-center gap-4 mb-6">
                     <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
                       {stat.user.name.charAt(0)}
@@ -464,6 +491,10 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                     <div className="w-full bg-gray-100 rounded-full h-2.5 mt-3">
                       <div className="bg-emerald-500 h-2.5 rounded-full transition-all" style={{ width: `${(stat.done / stat.total) * 100}%` }}></div>
                     </div>
+                  </div>
+                  {/* 📌 호버 시 나타나는 힌트 */}
+                  <div className="mt-4 pt-3 border-t border-gray-100 text-center text-xs text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex justify-center items-center gap-1">
+                    <Search size={14}/> 클릭하여 상세 진행 업무 보기
                   </div>
                 </div>
               ))}
@@ -535,7 +566,7 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
 
       {/* Task Detail Modal */}
       {selectedTask && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/50 z-[50] flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             
             <div className="px-8 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
@@ -698,12 +729,103 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
         </div>
       )}
 
+      {/* 📌 모달 1: 담당자 클릭 시 나타나는 팝업 */}
+      {selectedAssigneeId && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
+            <div className="px-8 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
+                <User size={20} className="text-emerald-600" />
+                {MOCK_USERS.find(u => u.id === selectedAssigneeId)?.name} 님의 담당 업무 목록
+              </h3>
+              <button onClick={() => setSelectedAssigneeId(null)} className="text-gray-400 hover:text-gray-900"><X size={24}/></button>
+            </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 bg-gray-50">
+              {tasks.filter(t => t.assigneeId === selectedAssigneeId).length === 0 ? (
+                <p className="text-gray-500 text-center py-10 font-medium border border-dashed border-gray-300 rounded-xl">담당 중인 업무가 없습니다.</p>
+              ) : tasks.filter(t => t.assigneeId === selectedAssigneeId).map(t => (
+                <div key={t.id} onClick={() => { setSelectedAssigneeId(null); setSelectedTask(t); }} className="p-5 border border-gray-200 rounded-xl hover:border-emerald-400 hover:shadow-md bg-white cursor-pointer transition-all">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                      [{projects.find(p => p.id === t.projectId)?.name || '삭제된 프로젝트'}]
+                    </span>
+                    <span className={`px-2 py-1 rounded-full text-[11px] font-bold border ${STATUS_MAP[t.status].color}`}>
+                      {STATUS_MAP[t.status].label}
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-gray-900 text-base">{t.title}</h4>
+                  <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
+                    <p className={`text-xs font-bold ${isUrgent(t.dueDate) && t.status !== 'done' ? 'text-red-500' : 'text-gray-500'}`}>
+                      마감일: {t.dueDate}
+                    </p>
+                    <span className="text-xs text-emerald-600 font-bold hover:underline">자세히 보기</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-4 bg-white border-t border-gray-100 flex justify-end">
+              <button onClick={() => setSelectedAssigneeId(null)} className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 모달 2: 새 일정 추가 팝업 */}
       {isAddingTask && (
         <AddTaskModal projects={projects} users={MOCK_USERS} currentUser={currentUser} defaultDate={newTaskDefaultDate} defaultProjectId={newTaskDefaultProject} onClose={() => setIsAddingTask(false)} onAdd={handleAddTask} />
+      )}
+
+      {/* 📌 모달 3: 자료 업로드 팝업 */}
+      {isUploadingFile && (
+        <UploadFileModal projectId={uploadTargetProject} projects={projects} tasks={tasks} onClose={() => setIsUploadingFile(false)} onUpload={handleUploadFileFromMenu} />
       )}
     </div>
   );
 }
+
+// 📌 자료 업로드 팝업 컴포넌트
+function UploadFileModal({ projectId, projects, tasks, onClose, onUpload }) {
+  const projTasks = tasks.filter(t => t.projectId === projectId);
+  const [taskId, setTaskId] = useState(projTasks.length > 0 ? projTasks[0].id : '');
+  const [fileName, setFileName] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!taskId) return alert('해당 프로젝트에 만들어진 세부 업무가 없습니다. 먼저 [프로젝트 관리]에서 업무를 추가해주세요.');
+    if (!fileName.trim()) return alert('파일 이름을 입력해주세요.');
+    onUpload(taskId, fileName);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+          <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
+            <Upload size={20} className="text-emerald-600" /> 자료 직접 업로드
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-900"><X size={24}/></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">어떤 업무에 자료를 올릴까요?</label>
+            <select required value={taskId} onChange={e=>setTaskId(e.target.value)} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-gray-700 bg-gray-50 cursor-pointer">
+              {projTasks.length > 0 ? projTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>) : <option value="">등록된 세부 업무 없음</option>}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">업로드할 파일명 (테스트용)</label>
+            <input required type="text" value={fileName} onChange={e=>setFileName(e.target.value)} className="w-full border-2 border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none font-medium" placeholder="예) 상반기_결산_보고서.pdf" />
+          </div>
+          <div className="pt-4 flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="px-5 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50">취소</button>
+            <button type="submit" className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-md">업로드</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 
 function SidebarItem({ icon: Icon, label, active, onClick, badge, badgeColor = "bg-emerald-500" }) {
   return (
