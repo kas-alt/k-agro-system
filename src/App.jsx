@@ -4,7 +4,7 @@ import {
   FileEdit, ClipboardCheck, CheckCircle2, Files, MessageSquare, 
   BarChart3, PieChart, Search, Filter, MoreVertical, 
   Paperclip, Upload, X, Clock, Calendar, ChevronRight, UserCircle,
-  CalendarDays, ChevronLeft, LogOut, Lock, Plus, Trash2, FolderKanban, FolderPlus
+  CalendarDays, ChevronLeft, LogOut, Lock, Plus, Trash2, FolderKanban, FolderPlus, Download
 } from 'lucide-react';
 
 // --- [회사 실제 데이터] ---
@@ -53,7 +53,6 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
-  // 📌 로컬 스토리지 데이터 불러오기
   const [projects, setProjects] = useState(() => {
     const saved = localStorage.getItem('agro_projects');
     return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
@@ -64,7 +63,6 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_TASKS;
   });
 
-  // 📌 데이터 변경 시 자동 저장
   useEffect(() => { localStorage.setItem('agro_projects', JSON.stringify(projects)); }, [projects]);
   useEffect(() => { localStorage.setItem('agro_tasks', JSON.stringify(tasks)); }, [tasks]);
 
@@ -78,12 +76,10 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
   const [activeMenu, setActiveMenu] = useState('calendar');
   const [selectedTask, setSelectedTask] = useState(null);
   
-  // 모달 상태 관리
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskDefaultDate, setNewTaskDefaultDate] = useState('');
   const [newTaskDefaultProject, setNewTaskDefaultProject] = useState('');
   
-  // 담당자 클릭 팝업 및 파일 업로드 팝업 상태
   const [selectedAssigneeId, setSelectedAssigneeId] = useState(null);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [uploadTargetProject, setUploadTargetProject] = useState('');
@@ -116,7 +112,7 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
   const allComments = projectTasks.flatMap(t => t.comments?.map(c => ({ ...c, taskTitle: t.title, taskId: t.id })) || []);
   
   const assigneeStats = MOCK_USERS.map(user => {
-    const userTasks = tasks.filter(t => t.assigneeId === user.id); // 전체 프로젝트 기준으로 변경
+    const userTasks = tasks.filter(t => t.assigneeId === user.id); 
     return {
       user,
       total: userTasks.length,
@@ -132,7 +128,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
     }
   };
 
-  // 📌 상세창 내부의 (기존 데모용) 버튼 처리
   const handleFileUploadMock = (taskId) => {
     const newFile = { name: `첨부문서_${Date.now().toString().slice(-4)}.pdf`, uploader: currentUser.name, date: '2026-04-27' };
     const updatedTasks = tasks.map(t => {
@@ -141,15 +136,19 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
     });
     setTasks(updatedTasks);
     if (selectedTask && selectedTask.id === taskId) setSelectedTask(updatedTasks.find(t => t.id === taskId));
-    alert('파일이 업로드 되었습니다.');
+    alert('임시 파일이 업로드 되었습니다.');
   };
 
-  // 📌 새 기능: 메뉴에서 실제 파일 선택해서 업로드 처리
   const handleUploadFileFromMenu = (taskId, fileName) => {
     const newFile = { name: fileName, uploader: currentUser.name, date: '2026-04-27' };
     setTasks(tasks.map(t => t.id === taskId ? { ...t, uploadedFiles: [...(t.uploadedFiles || []), newFile] } : t));
     setIsUploadingFile(false);
     alert(`[${fileName}] 자료가 성공적으로 등록되었습니다!`);
+  };
+
+  // 📌 새 기능: 가짜 다운로드 액션 처리
+  const handleFileDownload = (fileName) => {
+    alert(`[${fileName}] 다운로드는 실제 서버(DB) 연동 후 지원됩니다.\n(현재는 기능 시연용 프로토타입 버전입니다.)`);
   };
 
   const handleAddTask = (newTaskData) => {
@@ -197,7 +196,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans text-gray-800">
-      {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col">
         <div className="p-6 bg-slate-950">
           <h1 className="text-emerald-500 font-extrabold text-xl flex items-center justify-center gap-2 mb-6 tracking-tight">
@@ -250,7 +248,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -398,7 +395,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                         {project.name}
                         <span className="text-sm font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{pFiles.length}건</span>
                       </h3>
-                      {/* 📌 파일 직접 추가 버튼 */}
                       <button
                         onClick={() => { setUploadTargetProject(project.id); setIsUploadingFile(true); }}
                         className="text-sm flex items-center gap-1 bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-colors"
@@ -412,16 +408,16 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                         {pFiles.map((file, idx) => (
                           <div 
                             key={idx} 
-                            className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex items-start gap-4 hover:border-emerald-400 transition-colors cursor-pointer"
-                            onClick={() => setSelectedTask(tasks.find(t => t.id === file.taskId))}
+                            className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex items-start gap-4 hover:border-emerald-400 transition-colors cursor-pointer group"
+                            onClick={() => handleFileDownload(file.name)}
                           >
                             <div className="p-3 bg-white shadow-sm rounded text-emerald-600"><Files size={28} /></div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-bold text-gray-900 truncate">{file.name}</p>
+                              <p className="font-bold text-gray-900 truncate group-hover:underline group-hover:text-emerald-700 transition-colors">{file.name}</p>
                               <p className="text-xs text-gray-500 mt-1 truncate">연관: {file.taskTitle}</p>
                               <div className="flex justify-between items-center mt-3 text-xs font-medium text-gray-400">
-                                <span>{file.uploader}</span>
-                                <span>{file.date}</span>
+                                <span>{file.uploader} | {file.date}</span>
+                                <Download size={14} className="opacity-0 group-hover:opacity-100 text-emerald-600 transition-opacity" />
                               </div>
                             </div>
                           </div>
@@ -493,7 +489,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                       <div className="bg-emerald-500 h-2.5 rounded-full transition-all" style={{ width: `${(stat.done / stat.total) * 100}%` }}></div>
                     </div>
                   </div>
-                  {/* 📌 호버 시 나타나는 힌트 */}
                   <div className="mt-4 pt-3 border-t border-gray-100 text-center text-xs text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex justify-center items-center gap-1">
                     <Search size={14}/> 클릭하여 상세 진행 업무 보기
                   </div>
@@ -657,11 +652,12 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                   {selectedTask.attachments && selectedTask.attachments.length > 0 ? (
                     <ul className="space-y-2">
                       {selectedTask.attachments.map((file, i) => (
-                        <li key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-300">
+                        <li key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-300 cursor-pointer group" onClick={() => handleFileDownload(file.name)}>
                           <div className="flex items-center gap-3">
-                            <Files size={18} className="text-gray-400" />
-                            <span className="font-medium text-gray-700">{file.name}</span>
+                            <Files size={18} className="text-gray-400 group-hover:text-emerald-600" />
+                            <span className="font-medium text-gray-700 group-hover:text-emerald-700 group-hover:underline">{file.name}</span>
                           </div>
+                          <Download size={16} className="text-gray-400 opacity-0 group-hover:opacity-100" />
                         </li>
                       ))}
                     </ul>
@@ -671,7 +667,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                 <div>
                    <div className="flex justify-between items-center mb-4">
                     <h4 className="font-bold text-gray-900 text-base flex items-center gap-2"><Upload size={18}/> 결과물 등록</h4>
-                    {/* 데모용 기존 파일 업로드 버튼 */}
                     {canEditTask(selectedTask) && (
                       <button onClick={() => handleFileUploadMock(selectedTask.id)} className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-md hover:bg-emerald-200 font-bold transition-colors">
                         + 임시 업로드
@@ -681,9 +676,12 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
                   {selectedTask.uploadedFiles && selectedTask.uploadedFiles.length > 0 ? (
                     <ul className="space-y-3">
                       {selectedTask.uploadedFiles.map((file, i) => (
-                        <li key={i} className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm flex justify-between items-center">
-                          <span className="font-bold text-emerald-700">{file.name}</span>
-                          <span className="text-xs text-gray-400 font-medium">{file.uploader} | {file.date}</span>
+                        <li key={i} className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm flex justify-between items-center group cursor-pointer hover:border-emerald-400 transition-colors" onClick={() => handleFileDownload(file.name)}>
+                          <span className="font-bold text-emerald-700 group-hover:underline">{file.name}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-gray-400 font-medium">{file.uploader} | {file.date}</span>
+                            <Download size={16} className="text-emerald-600 opacity-0 group-hover:opacity-100" />
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -731,7 +729,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
         </div>
       )}
 
-      {/* 📌 모달 1: 담당자 클릭 시 나타나는 팝업 */}
       {selectedAssigneeId && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
@@ -772,12 +769,10 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
         </div>
       )}
 
-      {/* 모달 2: 새 일정 추가 팝업 */}
       {isAddingTask && (
         <AddTaskModal projects={projects} users={MOCK_USERS} currentUser={currentUser} defaultDate={newTaskDefaultDate} defaultProjectId={newTaskDefaultProject} onClose={() => setIsAddingTask(false)} onAdd={handleAddTask} />
       )}
 
-      {/* 📌 모달 3: 자료 업로드 팝업 (실제 파일 선택기로 변경) */}
       {isUploadingFile && (
         <UploadFileModal projectId={uploadTargetProject} projects={projects} tasks={tasks} onClose={() => setIsUploadingFile(false)} onUpload={handleUploadFileFromMenu} />
       )}
@@ -785,7 +780,6 @@ function Dashboard({ currentUser, onLogout, projects, setProjects, tasks, setTas
   );
 }
 
-// 📌 자료 업로드 팝업 컴포넌트 (실제 파일 탐색기 연동)
 function UploadFileModal({ projectId, projects, tasks, onClose, onUpload }) {
   const projTasks = tasks.filter(t => t.projectId === projectId);
   const [taskId, setTaskId] = useState(projTasks.length > 0 ? projTasks[0].id : '');
@@ -795,8 +789,6 @@ function UploadFileModal({ projectId, projects, tasks, onClose, onUpload }) {
     e.preventDefault();
     if (!taskId) return alert('해당 프로젝트에 만들어진 세부 업무가 없습니다. 먼저 [프로젝트 관리]에서 업무를 추가해주세요.');
     if (!selectedFile) return alert('업로드할 파일을 선택해주세요.');
-    
-    // 파일 객체에서 파일의 '이름'만 추출해서 넘깁니다.
     onUpload(taskId, selectedFile.name);
   };
 
@@ -818,7 +810,6 @@ function UploadFileModal({ projectId, projects, tasks, onClose, onUpload }) {
           </div>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-2">파일 선택</label>
-            {/* 📌 진짜 파일 선택기(Input type="file") 추가 */}
             <input 
               required 
               type="file" 
