@@ -784,7 +784,7 @@ function LoginScreen({ onLogin }) {
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">이름</label>
-            <input required type="text" value={name} onChange={e=>setName(e.target.value)} className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold text-center text-lg outline-none focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="김은경" />
+            <input required type="text" value={name} onChange={e=>setName(e.target.value)} className="w-full bg-gray-50 border-none rounded-2xl p-4 font-bold text-center text-lg outline-none focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="홍길동" />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">PIN 번호 (4자리)</label>
