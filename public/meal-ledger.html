@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2026 식사 장부 시스템</title>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel (브라우저에서 JSX 실행) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Tailwind CSS (디자인) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background-color: #f8fafc; }
+    /* 체크박스 애니메이션 효과 */
+    .btn-check:active { transform: scale(0.95); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    const MEAL_PRICE = 9000;
+
+    const App = () => {
+      const [currentMonth, setCurrentMonth] = useState(5);
+      const [ledgerData, setLedgerData] = useState({});
+      const [carryoverData, setCarryoverData] = useState({});
+      const [price, setPrice] = useState(MEAL_PRICE);
+
+      const appId = 'meal-ledger-v5-local';
+
+      const generateDates = (cycleMonth) => {
+        const dates = [];
+        const year = 2026;
+        const startMonth = cycleMonth;
+        const endMonth = cycleMonth + 1;
+
+        const lastDayOfStartMonth = new Date(year, startMonth, 0).getDate();
+        for (let d = 11; d <= lastDayOfStartMonth; d++) {
+          const date = new Date(year, startMonth - 1, d);
+          const dayName = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
+          dates.push({
+            formatted: `${startMonth}월 ${d}일`,
+            day: dayName,
+            isWeekend: date.getDay() === 0 || date.getDay() === 6,
+            key: `${year}-${startMonth}-${d}`
+          });
+        }
+
+        for (let d = 1; d <= 10; d++) {
+          const date = new Date(year, endMonth - 1, d);
+          const dayName = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
+          dates.push({
+            formatted: `${endMonth}월 ${d}일`,
+            day: dayName,
+            isWeekend: date.getDay() === 0 || date.getDay() === 6,
+            key: `${year}-${endMonth}-${d}`
+          });
+        }
+        return dates;
+      };
+
+      const activeDates = useMemo(() => generateDates(currentMonth), [currentMonth]);
+
+      useEffect(() => {
+        const savedLedger = localStorage.getItem(`ledger_${appId}`);
+        if (savedLedger) setLedgerData(JSON.parse(savedLedger));
+        
+        const savedCarryover = localStorage.getItem(`carryover_${appId}`);
+        if (savedCarryover) setCarryoverData(JSON.parse(savedCarryover));
+      }, []);
+
+      const updateData = (newData) => {
+        setLedgerData(newData);
+        localStorage.setItem(`ledger_${appId}`, JSON.stringify(newData));
+      };
+
+      const updateCarryover = (month, member, value) => {
+        const newData = { ...carryoverData };
+        if (!newData[month]) newData[month] = {};
+        newData[month][member] = parseInt(value) || 0;
+        setCarryoverData(newData);
+        localStorage.setItem(`carryover_${appId}`, JSON.stringify(newData));
+      };
+
+      const toggleAttendance = (dateKey, member) => {
+        const newData = { ...ledgerData };
+        if (!newData[dateKey]) newData[dateKey] = {};
+        newData[dateKey][member] = !newData[dateKey][member];
+        updateData(newData);
+      };
+
+      const handleExternalCount = (dateKey, val) => {
+        const newData = { ...ledgerData };
+        if (!newData[dateKey]) newData[dateKey] = {};
+        newData[dateKey].external = parseInt(val) || 0;
+        updateData(newData);
+      };
+
+      const handleNote = (dateKey, val) => {
+        const newData = { ...ledgerData };
+        if (!newData[dateKey]) newData[dateKey] = {};
+        newData[dateKey].note = val;
+        updateData(newData);
+      };
+
+      const stats = useMemo(() => {
+        let counts = { rep: 0, head: 0, team: 0, external: 0 };
+        Object.keys(ledgerData).forEach(key => {
+          const data = ledgerData[key];
+          if (data.rep) counts.rep++;
+          if (data.head) counts.head++;
+          if (data.team) counts.team++;
+          if (data.external) counts.external += data.external;
+        });
+        const totalCount = counts.rep + counts.head + counts.team + counts.external;
+        return { ...counts, totalCount, totalAmount: totalCount * price };
+      }, [ledgerData, price]);
+
+      const currentMonthStats = useMemo(() => {
+        let counts = { rep: 0, head: 0, team: 0, external: 0 };
+        activeDates.forEach(date => {
+          const data = ledgerData[date.key] || {};
+          if (data.rep) counts.rep++;
+          if (data.head) counts.head++;
+          if (data.team) counts.team++;
+          if (data.external) counts.external += data.external;
+        });
+        return counts;
+      }, [ledgerData, activeDates]);
+
+      const MEMBERS = [
+        { id: 'rep', name: '김영곤 대표' },
+        { id: 'head', name: '김세진 본부장' },
+        { id: 'team', name: '강혜주 팀장' }
+      ];
+
+      const exportToExcel = () => {
+        let csvContent = "\uFEFF";
+        [5, 6, 7].forEach(month => {
+          csvContent += `[${month}월분 장부 내역]\n정산월,일자,요일,김영곤 대표,김세진 본부장,강혜주 팀장,외부인원,비고\n`;
+          const dates = generateDates(month);
+          dates.forEach(date => {
+            const data = ledgerData[date.key] || {};
+            const rep = data.rep ? "O" : "";
+            const head = data.head ? "O" : "";
+            const team = data.team ? "O" : "";
+            const ext = data.external || "";
+            const note = (data.note || "").replace(/,/g, " ");
+            csvContent += `${month}월분,${date.formatted},${date.day},${rep},${head},${team},${ext},${note}\n`;
+          });
+
+          csvContent += `\n[${month}월분 개인별 정산 내역]\n이름,식사 횟수,식대 발생액,이월 금액(미리 낸 돈),이번 달 낼 금액\n`;
+          let monthCounts = { rep: 0, head: 0, team: 0 };
+          dates.forEach(date => {
+            const data = ledgerData[date.key] || {};
+            if (data.rep) monthCounts.rep++;
+            if (data.head) monthCounts.head++;
+            if (data.team) monthCounts.team++;
+          });
+          MEMBERS.forEach(member => {
+            const count = monthCounts[member.id];
+            const cost = count * price;
+            const carryover = carryoverData[month]?.[member.id] || 0;
+            const finalAmount = cost - carryover;
+            csvContent += `${member.name},${count}회,${cost}원,${carryover}원,${finalAmount}원\n`;
+          });
+          csvContent += `\n\n`;
+        });
+
+        csvContent += `\n[전체 누적 통계]\n구분,,,김영곤 대표,김세진 본부장,강혜주 팀장,외부인원,\n총 식사 횟수,,,${stats.rep}회,${stats.head}회,${stats.team}회,${stats.external}명,\n총 발생 금액,,,,,,,${stats.totalAmount}원\n`;
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "식사장부_개인정산포함_2026.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      return (
+        <div className="min-h-screen p-4 md:p-8 text-slate-800">
+          <div className="max-w-5xl mx-auto">
+            
+            {/* Header */}
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 mb-6">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-lg shadow-blue-200 text-2xl">📅</div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">통합 식사 장부</h1>
+                    <p className="text-slate-500 text-sm font-medium">관리 대상: 대표, 본부장, 팀장</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-4">
+                  <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 overflow-x-auto">
+                    {[5, 6, 7].map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setCurrentMonth(m)}
+                        className={`px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 whitespace-nowrap ${currentMonth === m ? 'bg-white shadow-md text-blue-600 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        {m}월분 <span className="font-normal text-xs opacity-70 ml-1">({m}.11~{m+1}.10)</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={exportToExcel} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-xl font-bold transition-colors shadow-lg shadow-green-200">
+                    📥 <span className="hidden sm:inline">엑셀 다운로드</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Dashboard Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+              <StatCard label="김영곤 대표" count={stats.rep} color="blue" icon="👤" />
+              <StatCard label="김세진 본부장" count={stats.head} color="indigo" icon="👤" />
+              <StatCard label="강혜주 팀장" count={stats.team} color="emerald" icon="👤" />
+              <StatCard label="외부인원 합계" count={stats.external} color="amber" icon="👥" />
+              <div className="col-span-2 lg:col-span-1 bg-slate-900 rounded-3xl p-5 text-white shadow-xl flex flex-col justify-between">
+                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">누적 정산 금액</span>
+                <div className="mt-2"><span className="text-2xl font-bold">₩{stats.totalAmount.toLocaleString()}</span></div>
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4 px-2">
+              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-slate-200 shadow-sm">
+                <span className="text-slate-400">🧮</span>
+                <span className="text-sm font-bold text-slate-600">식대 단가</span>
+                <input type="number" value={price} onChange={(e) => setPrice(parseInt(e.target.value) || 0)} className="w-20 text-blue-600 font-bold focus:outline-none bg-transparent" />
+                <span className="text-sm text-slate-400">원</span>
+              </div>
+              <button onClick={() => { if(window.confirm('기록된 모든 데이터가 삭제됩니다. 계속하시겠습니까?')) { updateData({}); setCarryoverData({}); localStorage.removeItem(`carryover_${appId}`); } }} className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all text-xs font-bold">
+                🗑️ 전체 초기화
+              </button>
+            </div>
+
+            {/* Settlement Section */}
+            <div className="bg-white rounded-[2rem] shadow-xl shadow-blue-200/40 border border-blue-100 overflow-hidden mb-8">
+              <div className="p-5 bg-blue-50/50 border-b border-blue-100 flex items-center gap-3">
+                <div className="p-2 bg-blue-600 rounded-xl text-white">💰</div>
+                <h2 className="text-lg font-bold text-slate-800">{currentMonth}월분 개인별 정산 금액</h2>
+              </div>
+              <div className="overflow-x-auto p-2">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="p-4 font-bold text-slate-500 text-sm whitespace-nowrap">이름</th>
+                      <th className="p-4 font-bold text-slate-500 text-sm text-right whitespace-nowrap">식사 횟수</th>
+                      <th className="p-4 font-bold text-slate-500 text-sm text-right whitespace-nowrap">식대 발생액</th>
+                      <th className="p-4 font-bold text-amber-600 text-sm text-right whitespace-nowrap">이월 금액(미리 낸 돈)</th>
+                      <th className="p-4 font-bold text-blue-600 text-sm text-right whitespace-nowrap">이번 달 낼 금액</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {MEMBERS.map(member => {
+                      const count = currentMonthStats[member.id];
+                      const cost = count * price;
+                      const carryover = carryoverData[currentMonth]?.[member.id] || 0;
+                      const finalAmount = cost - carryover;
+                      return (
+                        <tr key={member.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="p-4 font-bold text-slate-800">{member.name}</td>
+                          <td className="p-4 text-right font-medium text-slate-600">{count}회</td>
+                          <td className="p-4 text-right font-medium text-slate-600">{cost.toLocaleString()}원</td>
+                          <td className="p-4 text-right">
+                            <div className="flex justify-end items-center gap-1">
+                              <span className="text-slate-400 font-bold">-</span>
+                              <input type="number" value={carryover || ''} onChange={(e) => updateCarryover(currentMonth, member.id, e.target.value)} placeholder="0" className="w-24 text-right py-1.5 px-2 font-bold text-amber-600 bg-amber-50 rounded-lg border border-amber-200 focus:bg-white focus:border-amber-400 focus:outline-none transition-all" />
+                              <span className="text-slate-500 text-sm">원</span>
+                            </div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <span className={`text-lg font-black ${finalAmount < 0 ? 'text-emerald-600' : 'text-blue-600'}`}>{finalAmount.toLocaleString()}</span>
+                            <span className="text-slate-500 text-sm ml-1">원</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Main Ledger Table */}
+            <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden mb-10">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="p-5 font-bold text-slate-400 text-xs uppercase tracking-wider w-32">일자</th>
+                      <th className="p-5 font-bold text-slate-400 text-xs uppercase tracking-wider w-16 text-center">요일</th>
+                      <th className="p-5 font-bold text-slate-600 text-sm text-center">김영곤 대표</th>
+                      <th className="p-5 font-bold text-slate-600 text-sm text-center">김세진 본부장</th>
+                      <th className="p-5 font-bold text-slate-600 text-sm text-center">강혜주 팀장</th>
+                      <th className="p-5 font-bold text-slate-600 text-sm text-center w-24">외부인원</th>
+                      <th className="p-5 font-bold text-slate-600 text-sm">비고</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {activeDates.map((date) => {
+                      const data = ledgerData[date.key] || {};
+                      return (
+                        <tr key={date.key} className={`group hover:bg-blue-50/30 transition-colors ${date.isWeekend ? 'bg-slate-50/40' : ''}`}>
+                          <td className="p-5"><span className="font-bold text-slate-900">{date.formatted}</span></td>
+                          <td className="p-5 text-center"><span className={`text-xs font-black px-2 py-1 rounded-md ${date.day === '일' ? 'text-red-500 bg-red-50' : date.day === '토' ? 'text-blue-500 bg-blue-50' : 'text-slate-400 bg-slate-100'}`}>{date.day}</span></td>
+                          {['rep', 'head', 'team'].map(m => (
+                            <td key={m} className="p-3 text-center">
+                              <button onClick={() => toggleAttendance(date.key, m)} className={`btn-check relative w-12 h-12 rounded-2xl flex items-center justify-center mx-auto transition-all duration-200 border-2 ${data[m] ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 text-xl' : 'bg-white border-slate-200 text-transparent hover:border-blue-200 text-xl'}`}>
+                                {data[m] ? '✔️' : '✔'}
+                              </button>
+                            </td>
+                          ))}
+                          <td className="p-5">
+                            <input type="number" min="0" value={data.external || ''} onChange={(e) => handleExternalCount(date.key, e.target.value)} placeholder="0" className="w-full text-center py-2.5 font-bold text-slate-700 bg-slate-50 rounded-xl border border-transparent focus:bg-white focus:border-blue-300 focus:outline-none transition-all" />
+                          </td>
+                          <td className="p-5">
+                            <input type="text" value={data.note || ''} onChange={(e) => handleNote(date.key, e.target.value)} placeholder="특이사항 입력..." className="w-full bg-transparent border-b border-transparent focus:border-slate-200 focus:outline-none text-sm text-slate-500 py-1" />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      );
+    };
+
+    const StatCard = ({ label, count, color, icon }) => {
+      const themes = {
+        blue: "bg-blue-50 text-blue-600 border-blue-100",
+        indigo: "bg-indigo-50 text-indigo-600 border-indigo-100",
+        emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
+        amber: "bg-amber-50 text-amber-600 border-amber-100",
+      };
+      return (
+        <div className={`bg-white border p-5 rounded-3xl shadow-sm flex flex-col justify-between ${themes[color]}`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className={`p-2 rounded-xl text-xl ${themes[color]}`}>{icon}</div>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500 mb-0.5">{label}</p>
+            <p className="text-2xl font-black">{count}<span className="text-sm font-normal ml-0.5 text-slate-400">회</span></p>
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

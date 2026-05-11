@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { 
-  getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
-  updateDoc, deleteDoc, addDoc, query 
+import {
+  getFirestore, collection, doc, setDoc, getDoc, onSnapshot,
+  updateDoc, deleteDoc, addDoc, query
 } from 'firebase/firestore';
-import { 
-  LayoutDashboard, ListTodo, User, Users, AlertCircle, 
-  FileEdit, ClipboardCheck, CheckCircle2, Files, MessageSquare, 
-  Search, Filter, Paperclip, Upload, X, Clock, Calendar, 
-  ChevronRight, UserCircle, CalendarDays, ChevronLeft, LogOut, 
-  Lock, Plus, Trash2, FolderKanban, FolderPlus, Download, 
-  Check, Edit3, RotateCcw, AlertTriangle, FileText
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import {
+  LayoutDashboard, ListTodo, User, Users, AlertCircle,
+  FileEdit, ClipboardCheck, CheckCircle2, Files, MessageSquare,
+  Search, Filter, Paperclip, Upload, X, Clock, Calendar,
+  ChevronRight, UserCircle, CalendarDays, ChevronLeft, LogOut,
+  Lock, Plus, Trash2, FolderKanban, FolderPlus, Download,
+  Check, Edit3, RotateCcw, AlertTriangle, FileText, UtensilsCrossed
 } from 'lucide-react';
 
 // --- [Firebase 초기화] ---
@@ -19,15 +20,14 @@ const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'k-agro-erp-v1';
 
 // --- [공통 데이터] ---
 const MOCK_USERS = [
   { id: 'u1', name: '김영곤', role: 'admin', dept: '대표이사', pin: '6070' },
   { id: 'u2', name: '김세진', role: 'manager', dept: '본부장', pin: '4680' },
-  { id: 'u3', name: '김은경', role: 'manager', dept: '팀장', pin: '7026' },
-  { id: 'u4', name: '고경석', role: 'employee', dept: '사원', pin: '7026' }, 
-  { id: 'u5', name: '강혜주', role: 'employee', dept: '사원', pin: '3186' },
+  { id: 'u5', name: '강혜주', role: 'manager', dept: '팀장', pin: '3186' },
 ];
 
 const STATUS_MAP = {
@@ -219,6 +219,7 @@ function Dashboard({ currentUser, onLogout, user }) {
             <p className="px-4 text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">데이터 리포트</p>
             <SidebarItem icon={Files} label="통합 업로드 자료함" active={activeMenu === 'files'} onClick={() => setActiveMenu('files')} />
             <SidebarItem icon={Users} label="담당자별 현황" active={activeMenu === 'assignees'} onClick={() => setActiveMenu('assignees')} />
+            <SidebarItem icon={UtensilsCrossed} label="식사 장부" active={activeMenu === 'meal'} onClick={() => setActiveMenu('meal')} />
           </div>
 
           <div className="pt-4 border-t border-slate-800">
@@ -232,7 +233,7 @@ function Dashboard({ currentUser, onLogout, user }) {
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
           <h2 className="text-xl font-extrabold text-gray-800 flex items-center gap-2">
             {getMenuTitle(activeMenu)}
-            {['calendar', 'projects', 'trash', 'assignees', 'files'].indexOf(activeMenu) === -1 && 
+            {['calendar', 'projects', 'trash', 'assignees', 'files', 'meal'].indexOf(activeMenu) === -1 &&
               <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">{filteredTasks.length}</span>
             }
           </h2>
@@ -293,7 +294,13 @@ function Dashboard({ currentUser, onLogout, user }) {
             <AssigneeStats tasks={aliveTasks} users={MOCK_USERS} onSelectTask={setSelectedTask} />
           )}
 
-          {['calendar', 'projects', 'trash', 'files', 'assignees'].indexOf(activeMenu) === -1 && (
+          {activeMenu === 'meal' && (
+            <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-200" style={{height: 'calc(100vh - 140px)'}}>
+              <iframe src="/meal-ledger.html" className="w-full h-full border-0" title="식사 장부" />
+            </div>
+          )}
+
+          {['calendar', 'projects', 'trash', 'files', 'assignees', 'meal'].indexOf(activeMenu) === -1 && (
             <TaskListView tasks={filteredTasks} projects={aliveProjects} onSelect={setSelectedTask} isUrgent={isUrgent} />
           )}
         </div>
@@ -343,18 +350,32 @@ function TaskDetailModal({ task, onClose, onUpdate, onDelete, currentUser }) {
     setNewIssue('');
   };
 
-  const handleFileUpload = (e, type) => {
+  const handleFileUpload = async (e, type) => {
     const file = e.target.files[0];
     if(!file) return;
-    const newF = { id: Date.now(), name: file.name, uploader: currentUser.name, date: '2026-04-27' };
-    if(type === 'ref') onUpdate({ attachments: [...(task.attachments || []), newF] });
-    else onUpdate({ uploadedFiles: [...(task.uploadedFiles || []), newF] });
+    const path = `artifacts/${appId}/files/${task.id}/${Date.now()}_${file.name}`;
+    try {
+      const snap = await uploadBytes(storageRef(storage, path), file);
+      const url = await getDownloadURL(snap.ref);
+      const today = new Date().toISOString().split('T')[0];
+      const newF = { id: Date.now(), name: file.name, uploader: currentUser.name, date: today, url, storagePath: path };
+      if(type === 'ref') onUpdate({ attachments: [...(task.attachments || []), newF] });
+      else onUpdate({ uploadedFiles: [...(task.uploadedFiles || []), newF] });
+    } catch(err) {
+      console.error("파일 업로드 실패:", err);
+      alert("파일 업로드에 실패했습니다. Firebase Storage가 활성화되어 있는지 확인해 주세요.");
+    }
   };
 
-  const removeFile = (fId, type) => {
+  const removeFile = async (fId, type) => {
     if(!window.confirm("파일을 삭제하시겠습니까?")) return;
-    if(type === 'ref') onUpdate({ attachments: task.attachments.filter(f => f.id !== fId) });
-    else onUpdate({ uploadedFiles: task.uploadedFiles.filter(f => f.id !== fId) });
+    const fileList = type === 'ref' ? (task.attachments || []) : (task.uploadedFiles || []);
+    const target = fileList.find(f => f.id === fId);
+    if(target?.storagePath) {
+      try { await deleteObject(storageRef(storage, target.storagePath)); } catch(err) { console.error("스토리지 삭제 실패:", err); }
+    }
+    if(type === 'ref') onUpdate({ attachments: fileList.filter(f => f.id !== fId) });
+    else onUpdate({ uploadedFiles: fileList.filter(f => f.id !== fId) });
   };
 
   return (
@@ -403,6 +424,7 @@ function TaskDetailModal({ task, onClose, onUpdate, onDelete, currentUser }) {
                         <div key={f.id} className="flex justify-between items-center p-3 bg-white border border-gray-100 rounded-xl hover:shadow-sm transition-all group">
                           <span className="text-xs font-bold text-gray-600 truncate mr-2">{f.name}</span>
                           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {f.url && <a href={f.url} target="_blank" rel="noreferrer" download={f.name} className="text-emerald-500 hover:text-emerald-700"><Download size={14}/></a>}
                             <button onClick={()=>removeFile(f.id, 'ref')} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
                           </div>
                         </div>
@@ -420,7 +442,10 @@ function TaskDetailModal({ task, onClose, onUpdate, onDelete, currentUser }) {
                       {task.uploadedFiles?.map(f => (
                         <div key={f.id} className="flex justify-between items-center p-3 bg-blue-50/30 border border-blue-100 rounded-xl group">
                           <span className="text-xs font-black text-blue-700 truncate">{f.name}</span>
-                          <button onClick={()=>removeFile(f.id, 'out')} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {f.url && <a href={f.url} target="_blank" rel="noreferrer" download={f.name} className="text-blue-500 hover:text-blue-700"><Download size={14}/></a>}
+                            <button onClick={()=>removeFile(f.id, 'out')} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
+                          </div>
                         </div>
                       ))}
                       {(!task.uploadedFiles || task.uploadedFiles.length === 0) && <p className="text-[10px] text-gray-300 text-center py-4 italic">등록된 결과물 없음</p>}
@@ -534,7 +559,7 @@ function FilesView({ tasks, projects, onDownload }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tasks.flatMap(t => (tab === 'ref' ? t.attachments : t.uploadedFiles) || []).map((f, idx) => (
-          <div key={idx} onClick={()=>onDownload(f.name)} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-4 hover:border-emerald-400 cursor-pointer group">
+          <div key={idx} onClick={()=>{ if(f.url) window.open(f.url, '_blank'); }} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-4 hover:border-emerald-400 cursor-pointer group">
             <div className={`p-3 rounded-xl ${tab==='ref'?'bg-emerald-50 text-emerald-600':'bg-blue-50 text-blue-600'}`}><FileText size={24}/></div>
             <div className="min-w-0">
               <p className="font-black text-gray-900 truncate group-hover:underline">{f.name}</p>
@@ -768,9 +793,6 @@ function LoginScreen({ onLogin }) {
           {error && <p className="text-red-500 text-xs text-center font-bold">{error}</p>}
           <button type="submit" className="w-full bg-emerald-600 text-white rounded-2xl p-5 font-black text-lg shadow-xl shadow-emerald-200 hover:bg-emerald-700 transition-all active:scale-95">접속하기</button>
         </form>
-        <div className="pt-4 grid grid-cols-2 gap-2">
-          {MOCK_USERS.map(u => <div key={u.id} className="bg-gray-50 p-2 rounded-xl text-[9px] font-bold text-gray-400 border border-gray-100 text-center">{u.name}: {u.pin}</div>)}
-        </div>
       </div>
     </div>
   );
@@ -831,6 +853,6 @@ function AddTaskModal({ projects, activeProjectId, users, currentUser, defaultDa
 }
 
 function getMenuTitle(m) {
-  const titles = { calendar: '일정 통합 캘린더', projects: '전체 프로젝트 관리', all: '프로젝트 업무 상세', mine: '내 담당 업무함', urgent: '마감 긴급 업무', revision: '수정 검토 요청', review: '최종 검토 대기', done: '완료 업무 보관함', files: '전체 업로드 자료함', assignees: '멤버별 업무 현황', trash: '시스템 휴지통' };
+  const titles = { calendar: '일정 통합 캘린더', projects: '전체 프로젝트 관리', all: '프로젝트 업무 상세', mine: '내 담당 업무함', urgent: '마감 긴급 업무', revision: '수정 검토 요청', review: '최종 검토 대기', done: '완료 업무 보관함', files: '전체 업로드 자료함', assignees: '멤버별 업무 현황', trash: '시스템 휴지통', meal: '식사 장부' };
   return titles[m] || '현황 대시보드';
 }
