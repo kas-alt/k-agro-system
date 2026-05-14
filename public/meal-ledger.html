@@ -27,7 +27,7 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    const MEAL_PRICE = 9000;
+    const MEAL_PRICE = 7000;
 
     const App = () => {
       const [currentMonth, setCurrentMonth] = useState(5);
@@ -73,9 +73,12 @@
       useEffect(() => {
         const savedLedger = localStorage.getItem(`ledger_${appId}`);
         if (savedLedger) setLedgerData(JSON.parse(savedLedger));
-        
+
         const savedCarryover = localStorage.getItem(`carryover_${appId}`);
         if (savedCarryover) setCarryoverData(JSON.parse(savedCarryover));
+
+        const savedPrice = localStorage.getItem(`price_${appId}`);
+        if (savedPrice) setPrice(parseInt(savedPrice));
       }, []);
 
       const updateData = (newData) => {
@@ -239,7 +242,7 @@
               <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-slate-200 shadow-sm">
                 <span className="text-slate-400">🧮</span>
                 <span className="text-sm font-bold text-slate-600">식대 단가</span>
-                <input type="number" value={price} onChange={(e) => setPrice(parseInt(e.target.value) || 0)} className="w-20 text-blue-600 font-bold focus:outline-none bg-transparent" />
+                <input type="number" value={price} onChange={(e) => { const v = parseInt(e.target.value) || 0; setPrice(v); localStorage.setItem(`price_${appId}`, v); }} className="w-20 text-blue-600 font-bold focus:outline-none bg-transparent" />
                 <span className="text-sm text-slate-400">원</span>
               </div>
               <button onClick={() => { if(window.confirm('기록된 모든 데이터가 삭제됩니다. 계속하시겠습니까?')) { updateData({}); setCarryoverData({}); localStorage.removeItem(`carryover_${appId}`); } }} className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all text-xs font-bold">
