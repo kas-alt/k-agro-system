@@ -1799,23 +1799,15 @@ function distResultReset() {
 }
 
 async function geocodeAddr(addr) {
-  const url = `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(addr)}`;
-  const res = await fetch(url, { headers: { Authorization: `KakaoAK ${KAKAO_KEY}` } });
-  if (!res.ok) throw new Error('카카오 API 오류: ' + res.status);
+  // Nominatim (OpenStreetMap) — 무료, API 키 불필요, CORS 허용
+  const q = encodeURIComponent(addr + ' 대한민국');
+  const url = `https://nominatim.openstreetmap.org/search?q=${q}&countrycodes=kr&format=json&limit=1&accept-language=ko`;
+  const res = await fetch(url, { headers: { 'Accept-Language': 'ko' } });
+  if (!res.ok) throw new Error('주소 검색 오류: ' + res.status);
   const json = await res.json();
-  const docs = json.documents;
-  if (!docs || docs.length === 0) {
-    // 주소 검색 실패 시 키워드 검색으로 재시도
-    const url2 = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(addr)}`;
-    const res2 = await fetch(url2, { headers: { Authorization: `KakaoAK ${KAKAO_KEY}` } });
-    const json2 = await res2.json();
-    if (!json2.documents || json2.documents.length === 0) throw new Error(`주소를 찾을 수 없습니다: "${addr}"`);
-    const d = json2.documents[0];
-    return { lat: parseFloat(d.y), lng: parseFloat(d.x), name: d.place_name || addr };
-  }
-  const d = docs[0];
-  const x = parseFloat(d.x), y = parseFloat(d.y);
-  return { lat: y, lng: x, name: d.address_name || addr };
+  if (!json || json.length === 0) throw new Error(`주소를 찾을 수 없습니다: "${addr}"\n(예: 서울시 중구 세종대로 110, 정읍 농업기술센터)`);
+  const d = json[0];
+  return { lat: parseFloat(d.lat), lng: parseFloat(d.lon), name: d.display_name.split(',').slice(0,3).join(', ') };
 }
 
 async function getOSRMDistance(fromLat, fromLng, toLat, toLng) {
