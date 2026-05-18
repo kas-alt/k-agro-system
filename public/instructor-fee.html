@@ -1788,7 +1788,7 @@ function openDistCalc() {
   document.getElementById('dist-result-box').classList.remove('visible');
   document.getElementById('dist-add-btn').style.display = 'none';
   document.getElementById('dist-error').style.display = 'none';
-  openModal('dist-calc-modal');
+  document.getElementById('dist-calc-modal').classList.add('open');
 }
 
 function distResultReset() {
@@ -1850,7 +1850,7 @@ async function calcDist() {
     const cost = Math.round(totalKm * rate);
 
     _distResult = { oneWayKm, totalKm, cost, rate, roundtrip,
-      label: `교통비 (${roundtrip ? '왕복 ' : '편도 '}${totalKm}km)` };
+      label: `기름값 (주유비) — ${roundtrip ? '왕복 ' : '편도 '}${totalKm}km` };
 
     document.getElementById('dist-one-way').textContent = `${oneWayKm} km`;
     document.getElementById('dist-total-label').textContent = roundtrip ? '왕복 거리' : '편도 거리';
