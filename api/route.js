@@ -11,10 +11,9 @@ export default async function handler(req, res) {
   const TMAP_KEY = 'E0ZR1U6u4OyY1StTCgv32f4AVGj1pcF9P6BDoPci';
 
   try {
-    const response = await fetch('https://apis.openapi.sk.com/tmap/routes?version=1', {
+    const response = await fetch(`https://apis.openapi.sk.com/tmap/routes?version=1&appKey=${TMAP_KEY}`, {
       method: 'POST',
       headers: {
-        'appKey': TMAP_KEY,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
