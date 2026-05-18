@@ -576,11 +576,18 @@
           <input type="checkbox" id="dist-roundtrip" checked onchange="distCalcIfReady()"> 왕복
         </label>
         <div class="rate-wrap">
-          <span>연료비 단가</span>
-          <div class="input-suffix" style="width:100px">
+          <span>연료 단가</span>
+          <div class="input-suffix" style="width:90px">
             <span>원/km</span>
             <input type="number" id="dist-rate" value="250" min="1" oninput="distCalcIfReady()">
           </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <label style="font-size:12.5px;color:#4a5568;white-space:nowrap">🛣️ 고속도로 통행료</label>
+        <div class="input-suffix" style="flex:1">
+          <span>원</span>
+          <input type="number" id="dist-toll-input" placeholder="0 (없으면 비워두세요)" min="0" oninput="distCalcIfReady()" style="width:100%">
         </div>
       </div>
       <button class="btn btn-primary" style="width:100%;padding:11px" onclick="calcDist()" id="dist-calc-btn">📍 주행거리 계산</button>
@@ -1805,23 +1812,12 @@ async function geocodeAddr(addr) {
   return { lat: json.lat, lng: json.lng, name: json.name };
 }
 
-async function getTmapRoute(fromLat, fromLng, toLat, toLng) {
-  const url = `/api/route?fromLat=${fromLat}&fromLng=${fromLng}&toLat=${toLat}&toLng=${toLng}`;
-  const res = await fetch(url);
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || '경로 계산 실패');
-  return {
-    km: Math.round(json.distanceM / 100) / 10,   // m → km (소수 1자리)
-    minutes: Math.round(json.durationSec / 60),
-    tollFare: json.tollFare || 0,
-  };
-}
-
 async function calcDist() {
   const fromAddr = document.getElementById('dist-from').value.trim();
   const toAddr = document.getElementById('dist-to').value.trim();
   const rate = parseFloat(document.getElementById('dist-rate').value) || 250;
   const roundtrip = document.getElementById('dist-roundtrip').checked;
+  const tollInput = parseFloat(document.getElementById('dist-toll-input').value) || 0;
   const errEl = document.getElementById('dist-error');
   const btn = document.getElementById('dist-calc-btn');
 
@@ -1832,16 +1828,20 @@ async function calcDist() {
   btn.textContent = '⏳ 계산 중...';
   try {
     const [fromGeo, toGeo] = await Promise.all([geocodeAddr(fromAddr), geocodeAddr(toAddr)]);
-    const route = await getTmapRoute(fromGeo.lat, fromGeo.lng, toGeo.lat, toGeo.lng);
 
-    const oneWayKm = route.km;
+    const url = `/api/route?fromLat=${fromGeo.lat}&fromLng=${fromGeo.lng}&toLat=${toGeo.lat}&toLng=${toGeo.lng}`;
+    const res = await fetch(url);
+    const route = await res.json();
+    if (!res.ok) throw new Error(route.error || '경로 계산 실패');
+
+    const oneWayKm = Math.round(route.distanceM / 100) / 10;
     const totalKm = roundtrip ? Math.round(oneWayKm * 2 * 10) / 10 : oneWayKm;
     const fuelCost = Math.round(totalKm * rate);
-    const tollFare = roundtrip ? route.tollFare * 2 : route.tollFare;
+    const tollFare = roundtrip ? tollInput * 2 : tollInput;
+    const minutes = Math.round(route.durationSec / 60);
 
     _distResult = { oneWayKm, totalKm, fuelCost, tollFare, rate, roundtrip,
-      fuelLabel: `기름값 (주유비) — ${roundtrip ? '왕복 ' : '편도 '}${totalKm}km`,
-      tollLabel: '고속도로 통행료' };
+      fuelLabel: `기름값 (주유비) — ${roundtrip ? '왕복 ' : '편도 '}${totalKm}km` };
 
     document.getElementById('dist-one-way').textContent = `${oneWayKm} km`;
     document.getElementById('dist-total-label').textContent = roundtrip ? '왕복 거리' : '편도 거리';
@@ -1849,7 +1849,7 @@ async function calcDist() {
     document.getElementById('dist-toll').textContent = tollFare > 0 ? won(tollFare) : '없음';
     document.getElementById('dist-cost').textContent = won(fuelCost);
     document.getElementById('dist-route-info').textContent =
-      `${fromGeo.name} → ${toGeo.name} | 예상 소요 ${route.minutes}분 | 연료 단가 ${won(rate)}/km`;
+      `${fromGeo.name} → ${toGeo.name} | 예상 소요 ${minutes}분 | 연료 단가 ${won(rate)}/km`;
     document.getElementById('dist-result-box').classList.add('visible');
     document.getElementById('dist-add-btn').style.display = '';
   } catch(e) {
@@ -1868,9 +1868,7 @@ function distCalcIfReady() {
 function addDistToExpense() {
   if (!_distResult) return;
   addExpenseRow(_distResult.fuelLabel, _distResult.fuelCost);
-  if (_distResult.tollFare > 0) {
-    addExpenseRow(_distResult.tollLabel, _distResult.tollFare);
-  }
+  if (_distResult.tollFare > 0) addExpenseRow('고속도로 통행료', _distResult.tollFare);
   closeModal('dist-calc-modal');
   calcPreview();
 }
