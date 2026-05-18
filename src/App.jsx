@@ -12,7 +12,7 @@ import {
   Search, Filter, Paperclip, Upload, X, Clock, Calendar,
   ChevronRight, UserCircle, CalendarDays, ChevronLeft, LogOut,
   Lock, Plus, Trash2, FolderKanban, FolderPlus, Download,
-  Check, Edit3, RotateCcw, AlertTriangle, FileText, UtensilsCrossed
+  Check, Edit3, RotateCcw, AlertTriangle, FileText, UtensilsCrossed, Banknote
 } from 'lucide-react';
 
 // --- [Firebase 초기화] ---
@@ -81,6 +81,7 @@ function Dashboard({ currentUser, onLogout, user }) {
   const [activeMenu, setActiveMenu] = useState('calendar');
   const [selectedTask, setSelectedTask] = useState(null);
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [instExpanded, setInstExpanded] = useState(false);
   const [newTaskDefaultDate, setNewTaskDefaultDate] = useState('');
   const [calendarDate, setCalendarDate] = useState(new Date('2026-04-27'));
 
@@ -222,6 +223,24 @@ function Dashboard({ currentUser, onLogout, user }) {
             <SidebarItem icon={UtensilsCrossed} label="식사 장부" active={activeMenu === 'meal'} onClick={() => setActiveMenu('meal')} />
           </div>
 
+          <div>
+            <button
+              onClick={() => { setInstExpanded(v => !v); if (!instExpanded) setActiveMenu('inst-dashboard'); }}
+              className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-slate-300 transition-colors"
+            >
+              <span>강사료 관리</span>
+              <Banknote size={13} className={`transition-transform ${instExpanded ? 'text-emerald-400' : ''}`} />
+            </button>
+            {instExpanded && (
+              <div className="ml-2 border-l border-slate-700 pl-2 space-y-0.5">
+                <SidebarItem icon={LayoutDashboard} label="전체 현황" active={activeMenu === 'inst-dashboard'} onClick={() => setActiveMenu('inst-dashboard')} />
+                <SidebarItem icon={Users} label="강사 관리" active={activeMenu === 'inst-mgmt'} onClick={() => setActiveMenu('inst-mgmt')} />
+                <SidebarItem icon={FileEdit} label="강사료 등록" active={activeMenu === 'inst-register'} onClick={() => setActiveMenu('inst-register')} />
+                <SidebarItem icon={FileText} label="지급 내역" active={activeMenu === 'inst-history'} onClick={() => setActiveMenu('inst-history')} />
+              </div>
+            )}
+          </div>
+
           <div className="pt-4 border-t border-slate-800">
             <SidebarItem icon={Trash2} label="시스템 휴지통" active={activeMenu === 'trash'} onClick={() => setActiveMenu('trash')} badge={projects.filter(p=>p.isDeleted).length + tasks.filter(t=>t.isDeleted).length} badgeColor="bg-slate-600" />
           </div>
@@ -233,7 +252,7 @@ function Dashboard({ currentUser, onLogout, user }) {
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
           <h2 className="text-xl font-extrabold text-gray-800 flex items-center gap-2">
             {getMenuTitle(activeMenu)}
-            {['calendar', 'projects', 'trash', 'assignees', 'files', 'meal'].indexOf(activeMenu) === -1 &&
+            {['calendar', 'projects', 'trash', 'assignees', 'files', 'meal'].indexOf(activeMenu) === -1 && !activeMenu.startsWith('inst-') &&
               <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">{filteredTasks.length}</span>
             }
           </h2>
@@ -300,7 +319,17 @@ function Dashboard({ currentUser, onLogout, user }) {
             </div>
           )}
 
-          {['calendar', 'projects', 'trash', 'files', 'assignees', 'meal'].indexOf(activeMenu) === -1 && (
+          {activeMenu.startsWith('inst-') && (() => {
+            const pageMap = { 'inst-dashboard': 'dashboard', 'inst-mgmt': 'instructors', 'inst-register': 'register', 'inst-history': 'history' };
+            const page = pageMap[activeMenu] || 'dashboard';
+            return (
+              <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-200" style={{height: 'calc(100vh - 140px)'}}>
+                <iframe key={activeMenu} src={`/instructor-fee.html?embed=1&page=${page}`} className="w-full h-full border-0" title="강사료 관리" />
+              </div>
+            );
+          })()}
+
+          {['calendar', 'projects', 'trash', 'files', 'assignees', 'meal'].indexOf(activeMenu) === -1 && !activeMenu.startsWith('inst-') && (
             <TaskListView tasks={filteredTasks} projects={aliveProjects} onSelect={setSelectedTask} isUrgent={isUrgent} />
           )}
         </div>
@@ -853,6 +882,6 @@ function AddTaskModal({ projects, activeProjectId, users, currentUser, defaultDa
 }
 
 function getMenuTitle(m) {
-  const titles = { calendar: '일정 통합 캘린더', projects: '전체 프로젝트 관리', all: '프로젝트 업무 상세', mine: '내 담당 업무함', urgent: '마감 긴급 업무', revision: '수정 검토 요청', review: '최종 검토 대기', done: '완료 업무 보관함', files: '전체 업로드 자료함', assignees: '멤버별 업무 현황', trash: '시스템 휴지통', meal: '식사 장부' };
+  const titles = { calendar: '일정 통합 캘린더', projects: '전체 프로젝트 관리', all: '프로젝트 업무 상세', mine: '내 담당 업무함', urgent: '마감 긴급 업무', revision: '수정 검토 요청', review: '최종 검토 대기', done: '완료 업무 보관함', files: '전체 업로드 자료함', assignees: '멤버별 업무 현황', trash: '시스템 휴지통', meal: '식사 장부', 'inst-dashboard': '강사료 — 전체 현황', 'inst-mgmt': '강사료 — 강사 관리', 'inst-register': '강사료 — 강사료 등록', 'inst-history': '강사료 — 지급 내역' };
   return titles[m] || '현황 대시보드';
 }
