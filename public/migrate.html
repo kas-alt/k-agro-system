@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>데이터 마이그레이션</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<style>
+  body { font-family: 'Apple SD Gothic Neo', sans-serif; background: #0f172a; color: #e2e8f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  .box { background: #1e293b; border-radius: 24px; padding: 48px; max-width: 520px; width: 90%; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+  h1 { font-size: 22px; font-weight: 800; margin-bottom: 8px; color: #f8fafc; }
+  p { font-size: 14px; color: #94a3b8; margin-bottom: 32px; }
+  .btn { background: #10b981; color: white; border: none; padding: 16px 40px; border-radius: 16px; font-size: 16px; font-weight: 800; cursor: pointer; width: 100%; transition: all 0.2s; }
+  .btn:hover { background: #059669; transform: scale(1.02); }
+  .btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; transform: none; }
+  .log { text-align: left; margin-top: 24px; background: #0f172a; border-radius: 12px; padding: 16px; font-size: 13px; line-height: 2; max-height: 300px; overflow-y: auto; }
+  .ok  { color: #34d399; }
+  .err { color: #f87171; }
+  .info{ color: #60a5fa; }
+  .done{ background: #064e3b; border: 1px solid #10b981; border-radius: 12px; padding: 16px; margin-top: 16px; color: #6ee7b7; font-weight: 700; display: none; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>📦 데이터 마이그레이션</h1>
+  <p>이 기기에 저장된 식사장부·강사관리 데이터를<br>Firebase 서버로 옮깁니다.</p>
+  <button class="btn" id="btn" onclick="migrate()">마이그레이션 시작</button>
+  <div class="log" id="log" style="display:none"></div>
+  <div class="done" id="done">✅ 마이그레이션 완료! 이제 모든 기기에서 데이터가 보입니다.</div>
+</div>
+
+<script>
+const cfg = {
+  apiKey: "AIzaSyDalk_OcLwovEi0oUyXIszL2KK_3gPl7q8",
+  authDomain: "k-agro-erp.firebaseapp.com",
+  projectId: "k-agro-erp",
+  storageBucket: "k-agro-erp.firebasestorage.app",
+  messagingSenderId: "935148647262",
+  appId: "1:935148647262:web:5ccf50dc2a422960a855cf"
+};
+if (!firebase.apps.length) firebase.initializeApp(cfg);
+const db = firebase.firestore();
+const auth = firebase.auth();
+const BASE = db.collection('artifacts').doc('k-agro-erp-v1').collection('public').doc('data');
+
+function log(msg, type='info') {
+  const el = document.getElementById('log');
+  el.style.display = 'block';
+  el.innerHTML += `<div class="${type}">${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function migrate() {
+  const btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.textContent = '진행 중...';
+
+  try {
+    log('🔐 Firebase 연결 중...');
+    await auth.signInAnonymously();
+    log('연결 완료', 'ok');
+
+    let total = 0;
+
+    // ── 1. 식사 장부 ──
+    const ledgerRaw = localStorage.getItem('ledger_meal-ledger-v5-local');
+    const carryoverRaw = localStorage.getItem('carryover_meal-ledger-v5-local');
+    const priceRaw = localStorage.getItem('price_meal-ledger-v5-local');
+
+    if (ledgerRaw) {
+      const ledger = JSON.parse(ledgerRaw);
+      const keys = Object.keys(ledger);
+      log(`📅 식사 장부: ${keys.length}일치 기록 발견`);
+      await BASE.collection('mealLedger').doc('records').set({ d: ledger });
+      log(`→ Firestore 저장 완료`, 'ok');
+      total++;
+    } else {
+      log('📅 식사 장부: 저장된 데이터 없음', 'info');
+    }
+
+    if (carryoverRaw || priceRaw) {
+      const carryover = carryoverRaw ? JSON.parse(carryoverRaw) : {};
+      const price = priceRaw ? parseInt(priceRaw) : 7000;
+      log(`💰 이월금액·식대단가 발견 (단가: ${price}원)`);
+      await BASE.collection('mealLedger').doc('settings').set({ carryover, price });
+      log(`→ Firestore 저장 완료`, 'ok');
+      total++;
+    }
+
+    // ── 2. 강사 관리 ──
+    const instRaw = localStorage.getItem('instructor-fee-mgmt');
+    if (instRaw) {
+      const instData = JSON.parse(instRaw);
+      const instCount = (instData.instructors || []).length;
+      const recCount = (instData.records || []).length;
+      log(`👩‍🏫 강사 관리: 강사 ${instCount}명, 기록 ${recCount}건 발견`);
+      await BASE.collection('instructorFee').doc('main').set(instData);
+      log(`→ Firestore 저장 완료`, 'ok');
+      total++;
+    } else {
+      log('👩‍🏫 강사 관리: 저장된 데이터 없음', 'info');
+    }
+
+    if (total === 0) {
+      log('⚠️ 이 기기에 마이그레이션할 데이터가 없습니다.', 'err');
+      log('이미 다른 기기에서 마이그레이션 완료되었거나 데이터가 없는 상태입니다.', 'info');
+    } else {
+      log(`\n✅ 총 ${total}개 항목 마이그레이션 완료!`, 'ok');
+      document.getElementById('done').style.display = 'block';
+    }
+
+    btn.textContent = '완료';
+  } catch(e) {
+    log(`❌ 오류: ${e.message}`, 'err');
+    btn.disabled = false;
+    btn.textContent = '다시 시도';
+  }
+}
+</script>
+</body>
+</html>
