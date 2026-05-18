@@ -14,6 +14,25 @@
   
   <!-- Tailwind CSS (디자인) -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script>
+    const _fbConfig = {
+      apiKey: "AIzaSyDalk_OcLwovEi0oUyXIszL2KK_3gPl7q8",
+      authDomain: "k-agro-erp.firebaseapp.com",
+      projectId: "k-agro-erp",
+      storageBucket: "k-agro-erp.firebasestorage.app",
+      messagingSenderId: "935148647262",
+      appId: "1:935148647262:web:5ccf50dc2a422960a855cf"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(_fbConfig);
+    const _db = firebase.firestore();
+    const _auth = firebase.auth();
+    const _BASE = _db.collection('artifacts').doc('k-agro-erp-v1').collection('public').doc('data').collection('mealLedger');
+  </script>
   
   <style>
     body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background-color: #f8fafc; }
@@ -34,8 +53,6 @@
       const [ledgerData, setLedgerData] = useState({});
       const [carryoverData, setCarryoverData] = useState({});
       const [price, setPrice] = useState(MEAL_PRICE);
-
-      const appId = 'meal-ledger-v5-local';
 
       const generateDates = (cycleMonth) => {
         const dates = [];
@@ -71,19 +88,25 @@
       const activeDates = useMemo(() => generateDates(currentMonth), [currentMonth]);
 
       useEffect(() => {
-        const savedLedger = localStorage.getItem(`ledger_${appId}`);
-        if (savedLedger) setLedgerData(JSON.parse(savedLedger));
-
-        const savedCarryover = localStorage.getItem(`carryover_${appId}`);
-        if (savedCarryover) setCarryoverData(JSON.parse(savedCarryover));
-
-        const savedPrice = localStorage.getItem(`price_${appId}`);
-        if (savedPrice) setPrice(parseInt(savedPrice));
+        _auth.signInAnonymously().then(() => {
+          // 출석 기록 실시간 동기화
+          _BASE.doc('records').onSnapshot(snap => {
+            if (snap.exists) setLedgerData(snap.data().d || {});
+          });
+          // 설정(이월금액, 식대단가) 실시간 동기화
+          _BASE.doc('settings').onSnapshot(snap => {
+            if (snap.exists) {
+              const s = snap.data();
+              if (s.carryover) setCarryoverData(s.carryover);
+              if (s.price != null) setPrice(s.price);
+            }
+          });
+        });
       }, []);
 
       const updateData = (newData) => {
         setLedgerData(newData);
-        localStorage.setItem(`ledger_${appId}`, JSON.stringify(newData));
+        _BASE.doc('records').set({ d: newData });
       };
 
       const updateCarryover = (month, member, value) => {
@@ -91,7 +114,7 @@
         if (!newData[month]) newData[month] = {};
         newData[month][member] = parseInt(value) || 0;
         setCarryoverData(newData);
-        localStorage.setItem(`carryover_${appId}`, JSON.stringify(newData));
+        _BASE.doc('settings').set({ price, carryover: newData }, { merge: true });
       };
 
       const toggleAttendance = (dateKey, member) => {
@@ -242,10 +265,10 @@
               <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-slate-200 shadow-sm">
                 <span className="text-slate-400">🧮</span>
                 <span className="text-sm font-bold text-slate-600">식대 단가</span>
-                <input type="number" value={price} onChange={(e) => { const v = parseInt(e.target.value) || 0; setPrice(v); localStorage.setItem(`price_${appId}`, v); }} className="w-20 text-blue-600 font-bold focus:outline-none bg-transparent" />
+                <input type="number" value={price} onChange={(e) => { const v = parseInt(e.target.value) || 0; setPrice(v); _BASE.doc('settings').set({ price: v, carryover: carryoverData }, { merge: true }); }} className="w-20 text-blue-600 font-bold focus:outline-none bg-transparent" />
                 <span className="text-sm text-slate-400">원</span>
               </div>
-              <button onClick={() => { if(window.confirm('기록된 모든 데이터가 삭제됩니다. 계속하시겠습니까?')) { updateData({}); setCarryoverData({}); localStorage.removeItem(`carryover_${appId}`); } }} className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all text-xs font-bold">
+              <button onClick={() => { if(window.confirm('기록된 모든 데이터가 삭제됩니다. 계속하시겠습니까?')) { updateData({}); setCarryoverData({}); _BASE.doc('settings').set({ price, carryover: {} }); } }} className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all text-xs font-bold">
                 🗑️ 전체 초기화
               </button>
             </div>

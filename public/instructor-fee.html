@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>강사료 관리 시스템</title>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow-x: hidden; max-width: 100%; }
+  body { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; background: #f0f4f8; color: #2d3748; }
+
+  .app { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 248px; background: #1a365d; color: white; display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+  .main { flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; }
+
+  /* Sidebar */
+  .sidebar-header { padding: 22px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
+  .sidebar-header h1 { font-size: 15px; font-weight: 700; line-height: 1.4; }
+  .sidebar-header p { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 3px; }
+  .nav { padding: 10px 0; flex: 1; }
+
+  /* Nav items */
+  .nav-item { display: flex; align-items: center; gap: 9px; padding: 11px 18px; cursor: pointer; font-size: 13.5px; transition: background 0.15s; border-left: 3px solid transparent; user-select: none; }
+  .nav-item:hover { background: rgba(255,255,255,0.07); }
+  .nav-item.active { background: rgba(255,255,255,0.13); border-left-color: #63b3ed; color: #bee3f8; }
+  .nav-icon { font-size: 15px; width: 18px; text-align: center; flex-shrink: 0; }
+  .nav-arrow { margin-left: auto; font-size: 10px; transition: transform 0.2s; color: rgba(255,255,255,0.4); }
+  .nav-arrow.open { transform: rotate(90deg); }
+
+  /* Instructor submenu */
+  .nav-sub { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
+  .nav-sub.open { max-height: 600px; }
+  .nav-sub-item { display: flex; align-items: center; gap: 8px; padding: 9px 18px 9px 38px; cursor: pointer; font-size: 13px; color: rgba(255,255,255,0.75); transition: background 0.15s; border-left: 3px solid transparent; }
+  .nav-sub-item:hover { background: rgba(255,255,255,0.07); color: white; }
+  .nav-sub-item.active { background: rgba(99,179,237,0.18); border-left-color: #63b3ed; color: #bee3f8; }
+  .nav-sub-item .avatar { width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .nav-sub-add { display: flex; align-items: center; gap: 8px; padding: 8px 18px 8px 38px; cursor: pointer; font-size: 12px; color: rgba(255,255,255,0.4); transition: color 0.15s; }
+  .nav-sub-add:hover { color: rgba(255,255,255,0.7); }
+  .nav-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 6px 0; }
+
+  /* Main content */
+  .content { padding: 30px 32px; max-width: 1100px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .page-header { margin-bottom: 26px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .page-header-left h2 { font-size: 21px; font-weight: 700; }
+  .page-header-left p { color: #718096; font-size: 13px; margin-top: 4px; }
+
+  /* Cards */
+  .card { background: white; border-radius: 12px; padding: 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 18px; }
+  .card-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: #2d3748; display: flex; align-items: center; gap: 7px; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .stats-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: white; border-radius: 12px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .stat-label { font-size: 11px; color: #718096; margin-bottom: 7px; font-weight: 500; }
+  .stat-value { font-size: 20px; font-weight: 700; color: #2d3748; }
+  .stat-sub { font-size: 11px; color: #a0aec0; margin-top: 3px; }
+  .stat-card.blue .stat-value { color: #3182ce; }
+  .stat-card.green .stat-value { color: #38a169; }
+  .stat-card.orange .stat-value { color: #dd6b20; }
+  .stat-card.purple .stat-value { color: #805ad5; }
+  .stat-card.red .stat-value { color: #e53e3e; }
+
+  /* Instructor profile card */
+  .profile-card { background: linear-gradient(135deg, #1a365d 0%, #2a4a8a 100%); border-radius: 14px; padding: 24px; color: white; margin-bottom: 18px; display: flex; align-items: center; gap: 20px; }
+  .profile-avatar { width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; flex-shrink: 0; }
+  .profile-info h2 { font-size: 20px; font-weight: 700; }
+  .profile-info p { font-size: 13px; color: rgba(255,255,255,0.65); margin-top: 4px; }
+  .profile-badges { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .profile-badge { background: rgba(255,255,255,0.15); border-radius: 20px; padding: 3px 12px; font-size: 12px; }
+  .profile-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+
+  /* Forms */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 12.5px; font-weight: 500; color: #4a5568; }
+  input, select, textarea { padding: 9px 11px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 13.5px; outline: none; transition: border-color 0.15s; background: white; font-family: inherit; }
+  input:focus, select:focus, textarea:focus { border-color: #4299e1; box-shadow: 0 0 0 3px rgba(66,153,225,0.1); }
+  .input-suffix { position: relative; }
+  .input-suffix span { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: #a0aec0; font-size: 13px; pointer-events: none; }
+  .input-suffix input { padding-right: 28px; }
+
+  /* Buttons */
+  .btn { padding: 9px 18px; border: none; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+  .btn-primary { background: #3182ce; color: white; }
+  .btn-primary:hover { background: #2b6cb0; }
+  .btn-success { background: #38a169; color: white; }
+  .btn-success:hover { background: #2f855a; }
+  .btn-danger { background: #e53e3e; color: white; }
+  .btn-danger:hover { background: #c53030; }
+  .btn-outline { background: white; color: #4a5568; border: 1.5px solid #e2e8f0; }
+  .btn-outline:hover { background: #f7fafc; }
+  .btn-ghost { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.25); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.25); }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+  .btn-icon { padding: 6px 9px; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { background: #f7fafc; padding: 11px 13px; text-align: left; font-size: 11.5px; font-weight: 600; color: #718096; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  td { padding: 13px; border-bottom: 1px solid #f0f4f8; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafcff; }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-blue { background: #ebf8ff; color: #2b6cb0; }
+  .badge-green { background: #f0fff4; color: #276749; }
+  .badge-orange { background: #fffaf0; color: #c05621; }
+  .badge-red { background: #fff5f5; color: #c53030; }
+  .badge-purple { background: #faf5ff; color: #6b46c1; }
+  .badge-gray { background: #f7fafc; color: #718096; }
+
+  /* Expense items */
+  .expense-list { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+  .expense-item { display: flex; gap: 6px; align-items: center; min-width: 0; width: 100%; overflow: hidden; }
+  .expense-item input[type=text] { flex: 1; min-width: 0; width: 0; }
+  .expense-item .amount-input { width: 120px; flex: none; flex-shrink: 0; min-width: 0; }
+  .expense-item .amount-input input { width: 100%; min-width: 0; }
+  .expense-item .btn-icon { flex-shrink: 0; padding: 6px 8px; }
+  .add-expense-btn { display: flex; align-items: center; gap: 6px; padding: 7px 13px; background: #f7fafc; border: 1.5px dashed #cbd5e0; border-radius: 8px; color: #718096; cursor: pointer; font-size: 13px; transition: all 0.15s; width: 100%; font-family: inherit; font-weight: 500; box-sizing: border-box; }
+  .add-expense-btn:hover { background: #edf2f7; border-color: #a0aec0; }
+
+  /* Attachment */
+  .attachment-drop { border: 2px dashed #cbd5e0; border-radius: 10px; padding: 18px; text-align: center; cursor: pointer; transition: all 0.15s; background: #fafcff; }
+  .attachment-drop:hover, .attachment-drop.dragover { border-color: #4299e1; background: #ebf8ff; }
+  .attachment-drop-icon { font-size: 28px; margin-bottom: 6px; }
+  .attachment-drop-text { font-size: 13px; color: #718096; }
+  .attachment-drop-text span { color: #4299e1; font-weight: 600; }
+  .attachment-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .attachment-item { display: flex; align-items: center; gap: 8px; padding: 8px 11px; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12.5px; }
+  .attachment-item-icon { font-size: 18px; flex-shrink: 0; }
+  .attachment-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #2d3748; font-weight: 500; }
+  .attachment-item-size { color: #a0aec0; font-size: 11px; flex-shrink: 0; }
+  .attachment-item-del { background: none; border: none; color: #a0aec0; cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; transition: color 0.15s; }
+  .attachment-item-del:hover { color: #e53e3e; }
+
+  /* Summary box */
+  .summary-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px; color: white; }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; font-size: 13.5px; border-bottom: 1px solid rgba(255,255,255,0.15); }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-row.total { font-size: 17px; font-weight: 700; padding-top: 12px; margin-top: 4px; }
+  .summary-row.highlight { font-weight: 600; }
+  .summary-value { font-weight: 600; }
+
+  /* Monthly table in instructor dash */
+  .monthly-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f0f4f8; font-size: 13px; }
+  .monthly-row:last-child { border-bottom: none; }
+  .monthly-bar-wrap { flex: 1; background: #f0f4f8; border-radius: 4px; height: 8px; overflow: hidden; }
+  .monthly-bar { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #3182ce, #63b3ed); transition: width 0.4s; }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: white; border-radius: 16px; width: 500px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal-header { padding: 18px 22px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .modal-header h3 { font-size: 16px; font-weight: 700; }
+  .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: #a0aec0; line-height: 1; padding: 4px; }
+  .modal-body { padding: 22px; }
+  .modal-footer { padding: 14px 22px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* Alert */
+  .alert { padding: 11px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+  .alert-info { background: #ebf8ff; color: #2b6cb0; border: 1px solid #bee3f8; }
+
+  /* Calc preview */
+  .calc-preview { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 13px 15px; font-size: 13px; color: #4a5568; line-height: 1.8; }
+  .calc-preview .line { display: flex; justify-content: space-between; }
+  .calc-preview .divider { border-top: 1px solid #e2e8f0; margin: 5px 0; }
+
+  /* Filter row */
+  .filter-row { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+  .filter-row select, .filter-row input { padding: 7px 10px; font-size: 13px; }
+
+  /* Empty */
+  .empty-state { text-align: center; padding: 44px 24px; color: #a0aec0; }
+  .empty-state .icon { font-size: 44px; margin-bottom: 10px; }
+  .empty-state p { font-size: 13.5px; }
+
+  /* Preset picker */
+  .preset-picker { position: relative; }
+  .preset-dropdown { display: none; position: absolute; top: calc(100% + 6px); left: 0; background: white; border: 1.5px solid #e2e8f0; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 200; width: 320px; overflow: hidden; }
+  .preset-dropdown.open { display: block; }
+  .preset-dropdown-header { padding: 12px 14px; background: #f7fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .preset-dropdown-header span { font-size: 12px; font-weight: 600; color: #4a5568; }
+  .preset-list { max-height: 280px; overflow-y: auto; }
+  .preset-option { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; border-bottom: 1px solid #f0f4f8; transition: background 0.1s; }
+  .preset-option:last-child { border-bottom: none; }
+  .preset-option:hover { background: #f0f9ff; }
+  .preset-option-icon { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  .preset-option-info { flex: 1; min-width: 0; }
+  .preset-option-name { font-size: 13px; font-weight: 600; color: #2d3748; }
+  .preset-option-detail { font-size: 11px; color: #a0aec0; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .preset-option-total { font-size: 13px; font-weight: 700; color: #e53e3e; flex-shrink: 0; }
+  .preset-empty { padding: 24px; text-align: center; color: #a0aec0; font-size: 13px; }
+
+  /* Preset management modal items */
+  .preset-mgmt-item { display: flex; align-items: center; gap: 10px; padding: 12px; background: #f7fafc; border-radius: 10px; margin-bottom: 8px; }
+  .preset-mgmt-info { flex: 1; min-width: 0; }
+  .preset-mgmt-name { font-size: 13px; font-weight: 600; }
+  .preset-mgmt-items { font-size: 11.5px; color: #718096; margin-top: 3px; }
+
+  /* Checkbox & action bar */
+  .rec-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #3182ce; }
+  .detail-action-bar { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: #ebf8ff; border-radius: 10px; margin-bottom: 12px; border: 1px solid #bee3f8; }
+  .detail-action-bar.visible { display: flex; }
+  .sel-count { font-size: 13px; font-weight: 600; color: #2b6cb0; }
+  tr.selected-row td { background: #ebf8ff !important; }
+
+  .register-grid { display: grid; grid-template-columns: 1fr 370px; gap: 18px; align-items: start; }
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .stats-grid, .stats-grid-3 { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .register-grid { grid-template-columns: 1fr; }
+    .register-grid > div:last-child { position: static; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h1>강사료 관리</h1>
+      <p>수수료 정산 시스템</p>
+    </div>
+    <nav class="nav">
+      <div class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')">
+        <span class="nav-icon">📊</span> 전체 대시보드
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-item" onclick="toggleInstructorNav()" style="font-weight:600">
+        <span class="nav-icon">👥</span> 강사
+        <span class="nav-arrow open" id="inst-arrow">▶</span>
+      </div>
+      <div class="nav-sub open" id="inst-sub">
+        <div id="inst-list"><!-- 강사 목록 동적 렌더 --></div>
+        <div class="nav-sub-add" onclick="showPage('instructors')">＋ 강사 추가</div>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-item" id="nav-instructors" onclick="showPage('instructors')">
+        <span class="nav-icon">⚙️</span> 강사 관리
+      </div>
+      <div class="nav-item" id="nav-register" onclick="showPage('register')">
+        <span class="nav-icon">✏️</span> 강사료 등록
+      </div>
+      <div class="nav-item" id="nav-history" onclick="showPage('history')">
+        <span class="nav-icon">📋</span> 지급 내역
+      </div>
+    </nav>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="content">
+
+      <!-- 대시보드 -->
+      <div id="page-dashboard" class="page active">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2>전체 대시보드</h2>
+            <p>모든 강사의 정산 현황을 한눈에 확인하세요</p>
+          </div>
+        </div>
+        <div class="stats-grid" id="stats-grid"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div class="card">
+            <div class="card-title">👤 강사별 정산 현황</div>
+            <div class="table-wrap">
+              <table id="dashboard-instructor-table">
+                <thead><tr><th>강사명</th><th>수수료율</th><th>총 강사비</th><th>수수료</th><th>지급액</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">📅 최근 등록 내역</div>
+            <div class="table-wrap">
+              <table id="dashboard-recent-table">
+                <thead><tr><th>날짜</th><th>강사명</th><th>강사비</th><th>지급액</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 강사 관리 (등록) -->
+      <div id="page-instructors" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2>강사 관리</h2>
+            <p>강사 등록 및 수수료율을 설정합니다</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">➕ 강사 등록</div>
+          <div class="form-grid" style="margin-bottom:14px">
+            <div class="form-group">
+              <label>강사명 *</label>
+              <input type="text" id="inst-name" placeholder="이름 입력">
+            </div>
+            <div class="form-group">
+              <label>연락처</label>
+              <input type="text" id="inst-phone" placeholder="010-0000-0000">
+            </div>
+            <div class="form-group">
+              <label>수수료율 * (회사 공제율)</label>
+              <div class="input-suffix">
+                <span>%</span>
+                <input type="number" id="inst-rate" placeholder="예: 30" min="0" max="100">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>강사 분야</label>
+              <input type="text" id="inst-field" placeholder="예: 외국어, IT, 요리 등">
+            </div>
+            <div class="form-group full">
+              <label>메모</label>
+              <input type="text" id="inst-memo" placeholder="특이사항 입력">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="addInstructor()">강사 등록</button>
+        </div>
+        <div class="card">
+          <div class="card-title">📋 등록된 강사 목록</div>
+          <div class="table-wrap">
+            <table id="instructor-table">
+              <thead><tr><th>강사명</th><th>연락처</th><th>분야</th><th>수수료율</th><th>총 강의 수</th><th>메모</th><th>관리</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 강사별 개인 대시보드 -->
+      <div id="page-instructor-detail" class="page">
+        <div id="instructor-detail-content"></div>
+      </div>
+
+      <!-- 강사료 등록 -->
+      <div id="page-register" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2>강사료 등록</h2>
+            <p>강의 정보와 경비를 입력하면 자동으로 정산액이 계산됩니다</p>
+          </div>
+        </div>
+        <div class="register-grid">
+          <div>
+            <div class="card">
+              <div class="card-title">📝 기본 정보</div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>강사 선택 *</label>
+                  <select id="reg-instructor" onchange="onInstructorSelect()">
+                    <option value="">강사를 선택하세요</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>강의 날짜 *</label>
+                  <input type="date" id="reg-date">
+                </div>
+                <div class="form-group full">
+                  <label>강의명 / 행사명</label>
+                  <input type="text" id="reg-title" placeholder="예: 비즈니스 영어 특강">
+                </div>
+                <div class="form-group">
+                  <label>총 강사비 *</label>
+                  <div class="input-suffix">
+                    <span>원</span>
+                    <input type="number" id="reg-fee" placeholder="500000" oninput="calcPreview()">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>강의 장소</label>
+                  <input type="text" id="reg-place" placeholder="예: 서울 본사">
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                <div class="card-title" style="margin-bottom:0">🧾 경비 내역 <span style="font-weight:400;font-size:11px;color:#a0aec0">(강사비에서 먼저 차감)</span></div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <div class="preset-picker" id="preset-picker">
+                    <button class="btn btn-primary btn-sm" onclick="togglePresetDropdown()" style="display:flex;align-items:center;gap:5px">
+                      ⚡ 자동입력 <span style="font-size:10px">▼</span>
+                    </button>
+                    <div class="preset-dropdown" id="preset-dropdown">
+                      <div class="preset-dropdown-header">
+                        <span>📍 자주 가는 장소 선택</span>
+                        <button onclick="openPresetMgmt();closePresetDropdown()" style="background:none;border:none;font-size:11px;color:#4299e1;cursor:pointer;font-weight:600">관리</button>
+                      </div>
+                      <div class="preset-list" id="preset-list"></div>
+                    </div>
+                  </div>
+                  <button class="btn btn-outline btn-sm" onclick="clearExpenses()">초기화</button>
+                </div>
+              </div>
+              <div class="expense-list" id="expense-list"></div>
+              <button class="add-expense-btn" onclick="addExpenseRow()" style="margin-top:10px">＋ 항목 직접 추가</button>
+            </div>
+            <div class="card">
+              <div class="card-title">📎 첨부파일</div>
+              <div class="attachment-list" id="attachment-list"></div>
+              <div class="attachment-drop" id="attachment-drop"
+                onclick="document.getElementById('file-input').click()"
+                ondragover="event.preventDefault();this.classList.add('dragover')"
+                ondragleave="this.classList.remove('dragover')"
+                ondrop="handleFileDrop(event)">
+                <div class="attachment-drop-icon">📂</div>
+                <div class="attachment-drop-text"><span>클릭</span>하거나 파일을 여기에 끌어다 놓으세요</div>
+                <div style="font-size:11px;color:#a0aec0;margin-top:4px">이미지, PDF, 문서 등 (파일당 최대 2MB)</div>
+              </div>
+              <input type="file" id="file-input" multiple style="display:none" onchange="addAttachments(this.files)">
+            </div>
+            <div class="card">
+              <div class="card-title">📌 메모</div>
+              <textarea id="reg-memo" rows="3" placeholder="특이사항, 메모 입력..." style="width:100%;resize:vertical"></textarea>
+            </div>
+          </div>
+          <div style="position:sticky;top:24px">
+            <div class="card">
+              <div class="card-title">💰 정산 미리보기</div>
+              <div id="calc-preview-box">
+                <div class="alert alert-info">강사와 강사비를 입력하면 자동으로 계산됩니다</div>
+              </div>
+            </div>
+            <button class="btn btn-success" style="width:100%;padding:13px;font-size:15px" onclick="saveRecord()">
+              💾 정산 내역 저장
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 지급 내역 -->
+      <div id="page-history" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <h2>지급 내역</h2>
+            <p>강사료 정산 전체 내역을 조회합니다</p>
+          </div>
+        </div>
+        <div class="filter-row">
+          <select id="filter-instructor" onchange="renderHistory()">
+            <option value="">전체 강사</option>
+          </select>
+          <input type="month" id="filter-month" onchange="renderHistory()" style="width:150px">
+          <button class="btn btn-outline btn-sm" onclick="clearFilters()">초기화</button>
+          <span style="margin-left:auto;font-size:12.5px;color:#718096" id="history-count"></span>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table id="history-table">
+              <thead>
+                <tr>
+                  <th>날짜</th><th>강사명</th><th>강의명</th><th>총 강사비</th>
+                  <th>총 경비</th><th>순 강사비</th><th>수수료율</th><th>회사 수수료</th><th>강사 지급액</th><th>관리</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- 경비 프리셋 관리 모달 -->
+<div class="modal-overlay" id="preset-mgmt-modal">
+  <div class="modal" style="width:580px">
+    <div class="modal-header">
+      <h3>📍 자주 가는 장소 관리</h3>
+      <button class="modal-close" onclick="closeModal('preset-mgmt-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- 새 프리셋 등록 -->
+      <div style="background:#f7fafc;border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:#2d3748">➕ 새 장소 등록</div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label>장소명 *</label>
+          <input type="text" id="preset-name" placeholder="예: 부산 벡스코, 대전 컨벤션센터">
+        </div>
+        <div style="font-size:12px;font-weight:500;color:#4a5568;margin-bottom:8px">경비 항목</div>
+        <div class="expense-list" id="preset-expense-list"></div>
+        <button class="add-expense-btn" onclick="addPresetExpenseRow()" style="margin-top:8px">＋ 항목 추가</button>
+        <div style="margin-top:12px;display:flex;justify-content:flex-end">
+          <button class="btn btn-primary btn-sm" onclick="savePreset()">장소 저장</button>
+        </div>
+      </div>
+      <!-- 저장된 프리셋 목록 -->
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:#2d3748">저장된 장소 목록</div>
+      <div id="preset-mgmt-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('preset-mgmt-modal')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 프리셋 수정 모달 -->
+<div class="modal-overlay" id="preset-edit-modal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <h3>장소 수정</h3>
+      <button class="modal-close" onclick="closeModal('preset-edit-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-preset-id">
+      <div class="form-group" style="margin-bottom:12px">
+        <label>장소명</label>
+        <input type="text" id="edit-preset-name">
+      </div>
+      <div style="font-size:12px;font-weight:500;color:#4a5568;margin-bottom:8px">경비 항목</div>
+      <div class="expense-list" id="edit-preset-expense-list"></div>
+      <button class="add-expense-btn" onclick="addEditPresetExpenseRow()" style="margin-top:8px">＋ 항목 추가</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('preset-edit-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveEditPreset()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 상세 모달 -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📄 정산 상세 내역</h3>
+      <button class="modal-close" onclick="closeModal('detail-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="detail-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('detail-modal')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 강사 수정 모달 -->
+<div class="modal-overlay" id="edit-instructor-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>강사 정보 수정</h3>
+      <button class="modal-close" onclick="closeModal('edit-instructor-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-inst-id">
+      <div class="form-grid">
+        <div class="form-group"><label>강사명</label><input type="text" id="edit-inst-name"></div>
+        <div class="form-group"><label>연락처</label><input type="text" id="edit-inst-phone"></div>
+        <div class="form-group"><label>수수료율 (%)</label><input type="number" id="edit-inst-rate" min="0" max="100"></div>
+        <div class="form-group"><label>분야</label><input type="text" id="edit-inst-field"></div>
+        <div class="form-group full"><label>메모</label><input type="text" id="edit-inst-memo"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('edit-instructor-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveEditInstructor()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== Firebase 초기화 =====
+const _fbCfg = {
+  apiKey: "AIzaSyDalk_OcLwovEi0oUyXIszL2KK_3gPl7q8",
+  authDomain: "k-agro-erp.firebaseapp.com",
+  projectId: "k-agro-erp",
+  storageBucket: "k-agro-erp.firebasestorage.app",
+  messagingSenderId: "935148647262",
+  appId: "1:935148647262:web:5ccf50dc2a422960a855cf"
+};
+if (!firebase.apps.length) firebase.initializeApp(_fbCfg);
+const _db = firebase.firestore();
+const _auth = firebase.auth();
+const _DOC = _db.collection('artifacts').doc('k-agro-erp-v1')
+  .collection('public').doc('data')
+  .collection('instructorFee').doc('main');
+
+// ===== Data =====
+let data = { instructors: [], records: [], expensePresets: [] };
+let currentPage = 'dashboard';
+let instructorNavOpen = true;
+
+function load() { /* Firestore onSnapshot으로 대체됨 */ }
+function save() {
+  _DOC.set(JSON.parse(JSON.stringify(data)));
+}
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// ===== Sidebar =====
+function renderSidebar() {
+  const avatarColors = ['#3182ce','#38a169','#dd6b20','#805ad5','#e53e3e','#0987a0','#b7791f','#2d3748'];
+
+  // 강사 목록만 업데이트
+  const instList = document.getElementById('inst-list');
+  if (instList) {
+    instList.innerHTML = data.instructors.map((inst, idx) => {
+      const color = avatarColors[idx % avatarColors.length];
+      const initials = inst.name.slice(0, 2);
+      const isActive = currentPage === 'instructor-' + inst.id;
+      return `
+        <div class="nav-sub-item ${isActive ? 'active' : ''}" onclick="showInstructorDashboard('${inst.id}')">
+          <div class="avatar" style="background:${color}">${initials}</div>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${inst.name}</span>
+          <span style="margin-left:auto;font-size:10px;opacity:0.5;flex-shrink:0">${inst.commissionRate}%</span>
+        </div>`;
+    }).join('');
+  }
+
+  // 접기/펼치기 상태 반영
+  const sub = document.getElementById('inst-sub');
+  const arrow = document.getElementById('inst-arrow');
+  if (sub) sub.classList.toggle('open', instructorNavOpen);
+  if (arrow) arrow.classList.toggle('open', instructorNavOpen);
+
+  // 활성 메뉴 표시
+  const pages = ['dashboard', 'instructors', 'register', 'history'];
+  pages.forEach(p => {
+    const el = document.getElementById('nav-' + p);
+    if (el) el.classList.toggle('active', currentPage === p);
+  });
+  // 강사 개인 페이지일 때 전체 메뉴 active 해제
+  if (currentPage.startsWith('instructor-')) {
+    pages.forEach(p => {
+      const el = document.getElementById('nav-' + p);
+      if (el) el.classList.remove('active');
+    });
+  }
+}
+
+function toggleInstructorNav() {
+  instructorNavOpen = !instructorNavOpen;
+  renderSidebar();
+}
+
+// ===== Navigation =====
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const pageEl = document.getElementById('page-' + name);
+  if (pageEl) pageEl.classList.add('active');
+  currentPage = name;
+  renderSidebar();
+
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'instructors') renderInstructors();
+  if (name === 'register') initRegister();
+  if (name === 'history') renderHistory();
+}
+
+function showInstructorDashboard(instId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-instructor-detail').classList.add('active');
+  currentPage = 'instructor-' + instId;
+  renderSidebar();
+  renderInstructorDetail(instId);
+}
+
+// ===== Format =====
+function won(n) {
+  return Number(n || 0).toLocaleString('ko-KR') + '원';
+}
+
+// ===== Dashboard =====
+function renderDashboard() {
+  const totalFee = data.records.reduce((s, r) => s + r.fee, 0);
+  const totalExp = data.records.reduce((s, r) => s + r.totalExpenses, 0);
+  const totalComm = data.records.reduce((s, r) => s + r.commission, 0);
+  const totalPay = data.records.reduce((s, r) => s + r.instructorPay, 0);
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card blue"><div class="stat-label">총 강사비</div><div class="stat-value">${won(totalFee)}</div><div class="stat-sub">전체 기간 합계</div></div>
+    <div class="stat-card orange"><div class="stat-label">총 경비 차감</div><div class="stat-value">${won(totalExp)}</div><div class="stat-sub">경비 합산</div></div>
+    <div class="stat-card purple"><div class="stat-label">회사 수수료 합계</div><div class="stat-value">${won(totalComm)}</div><div class="stat-sub">수수료 수입</div></div>
+    <div class="stat-card green"><div class="stat-label">강사 지급 합계</div><div class="stat-value">${won(totalPay)}</div><div class="stat-sub">실 지급액</div></div>
+  `;
+
+  const tbody = document.querySelector('#dashboard-instructor-table tbody');
+  if (data.instructors.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a0aec0;padding:20px">등록된 강사가 없습니다</td></tr>';
+  } else {
+    tbody.innerHTML = data.instructors.map(inst => {
+      const recs = data.records.filter(r => r.instructorId === inst.id);
+      const tf = recs.reduce((s,r)=>s+r.fee,0);
+      const tc = recs.reduce((s,r)=>s+r.commission,0);
+      const tp = recs.reduce((s,r)=>s+r.instructorPay,0);
+      return `<tr style="cursor:pointer" onclick="showInstructorDashboard('${inst.id}')">
+        <td><strong style="color:#3182ce">${inst.name}</strong></td>
+        <td><span class="badge badge-purple">${inst.commissionRate}%</span></td>
+        <td>${won(tf)}</td>
+        <td style="color:#e53e3e">${won(tc)}</td>
+        <td style="color:#38a169"><strong>${won(tp)}</strong></td>
+      </tr>`;
+    }).join('');
+  }
+
+  const tbody2 = document.querySelector('#dashboard-recent-table tbody');
+  const recent = [...data.records].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+  if (recent.length === 0) {
+    tbody2.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#a0aec0;padding:20px">등록된 내역이 없습니다</td></tr>';
+  } else {
+    tbody2.innerHTML = recent.map(r => {
+      const inst = data.instructors.find(i=>i.id===r.instructorId);
+      return `<tr>
+        <td style="color:#718096;font-size:11.5px">${r.date}</td>
+        <td>${inst ? inst.name : '-'}</td>
+        <td>${won(r.fee)}</td>
+        <td style="color:#38a169"><strong>${won(r.instructorPay)}</strong></td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+// ===== Instructor Detail Dashboard =====
+function renderInstructorDetail(instId) {
+  const inst = data.instructors.find(i => i.id === instId);
+  if (!inst) return;
+
+  const recs = data.records.filter(r => r.instructorId === instId).sort((a,b) => b.date.localeCompare(a.date));
+  const totalFee = recs.reduce((s,r)=>s+r.fee,0);
+  const totalExp = recs.reduce((s,r)=>s+r.totalExpenses,0);
+  const totalComm = recs.reduce((s,r)=>s+r.commission,0);
+  const totalPay = recs.reduce((s,r)=>s+r.instructorPay,0);
+  const avgPay = recs.length > 0 ? Math.round(totalPay / recs.length) : 0;
+
+  // Monthly breakdown
+  const monthlyMap = {};
+  recs.forEach(r => {
+    const m = r.date.slice(0,7);
+    if (!monthlyMap[m]) monthlyMap[m] = { fee:0, exp:0, comm:0, pay:0, count:0 };
+    monthlyMap[m].fee += r.fee;
+    monthlyMap[m].exp += r.totalExpenses;
+    monthlyMap[m].comm += r.commission;
+    monthlyMap[m].pay += r.instructorPay;
+    monthlyMap[m].count++;
+  });
+  const months = Object.keys(monthlyMap).sort().reverse().slice(0,6);
+  const maxPay = Math.max(...months.map(m => monthlyMap[m].pay), 1);
+
+  const monthlyRows = months.length === 0
+    ? '<div style="color:#a0aec0;font-size:13px;padding:12px 0">내역 없음</div>'
+    : months.map(m => {
+        const d = monthlyMap[m];
+        const pct = Math.round(d.pay / maxPay * 100);
+        const [y, mo] = m.split('-');
+        return `<div class="monthly-row">
+          <span style="width:64px;font-size:12px;color:#718096;flex-shrink:0">${y}.${mo}</span>
+          <span style="width:26px;font-size:11px;color:#a0aec0;text-align:center;flex-shrink:0">${d.count}건</span>
+          <div class="monthly-bar-wrap"><div class="monthly-bar" style="width:${pct}%"></div></div>
+          <span style="width:90px;text-align:right;font-size:12.5px;font-weight:600;color:#38a169;flex-shrink:0">${won(d.pay)}</span>
+          <span style="width:80px;text-align:right;font-size:11.5px;color:#e53e3e;flex-shrink:0">-${won(d.comm)}</span>
+        </div>`;
+      }).join('');
+
+  const recsHtml = recs.length === 0
+    ? '<div class="empty-state"><div class="icon">📋</div><p>등록된 강사료 내역이 없습니다</p></div>'
+    : `<div>
+        <div class="detail-action-bar" id="detail-action-bar">
+          <span class="sel-count" id="sel-count-label"></span>
+          <button class="btn btn-primary btn-sm" onclick="printStatement('${instId}')">🖨️ 명세서 출력 / PDF</button>
+          <button class="btn btn-success btn-sm" onclick="downloadExcel('${instId}')">📊 엑셀 다운로드</button>
+          <button class="btn btn-outline btn-sm" onclick="clearSelection('${instId}')">선택 해제</button>
+        </div>
+        <div class="table-wrap"><table id="detail-rec-table">
+          <thead><tr>
+            <th style="width:36px"><input type="checkbox" class="rec-checkbox" id="chk-all" onchange="toggleAllRecords('${instId}',this.checked)" title="전체 선택"></th>
+            <th>날짜</th><th>강의명</th><th>강의장소</th><th>총 강사비</th><th>경비</th><th>순 강사비</th><th>수수료(${inst.commissionRate}%)</th><th>지급액</th><th>관리</th>
+          </tr></thead>
+          <tbody>${recs.map(r => `<tr id="row-${r.id}" class="${_selectedRecIds.has(r.id)?'selected-row':''}">
+            <td style="text-align:center"><input type="checkbox" class="rec-checkbox" id="chk-${r.id}" ${_selectedRecIds.has(r.id)?'checked':''} onchange="toggleRecordSelect('${r.id}','${instId}')"></td>
+            <td style="font-size:11.5px;color:#718096;white-space:nowrap">${r.date}</td>
+            <td style="font-size:13px">${r.title || '-'}</td>
+            <td style="font-size:12px;color:#718096">${r.place || '-'}</td>
+            <td style="text-align:right">${won(r.fee)}</td>
+            <td style="text-align:right;color:#e53e3e;font-size:12px">${r.totalExpenses > 0 ? '-'+won(r.totalExpenses) : '-'}</td>
+            <td style="text-align:right">${won(r.netFee)}</td>
+            <td style="text-align:right;color:#c53030;font-size:12px">${won(r.commission)}</td>
+            <td style="text-align:right;color:#276749"><strong>${won(r.instructorPay)}</strong></td>
+            <td>
+              <button class="btn btn-outline btn-sm" onclick="showDetail('${r.id}')">상세</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteRecordFromDetail('${r.id}','${instId}')" style="margin-left:4px">삭제</button>
+            </td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+
+  const initials = inst.name.slice(0,2);
+  const avatarColors = ['#3182ce','#38a169','#dd6b20','#805ad5','#e53e3e','#0987a0','#b7791f','#2d3748'];
+  const idx = data.instructors.findIndex(i=>i.id===instId);
+  const avatarColor = avatarColors[idx % avatarColors.length];
+
+  document.getElementById('instructor-detail-content').innerHTML = `
+    <div class="page-header" style="margin-bottom:20px">
+      <div class="page-header-left">
+        <div style="font-size:12px;color:#a0aec0;margin-bottom:6px;cursor:pointer" onclick="showPage('dashboard')">← 전체 대시보드</div>
+        <h2>${inst.name} 강사 대시보드</h2>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" onclick="showRegisterFor('${instId}')">✏️ 강사료 등록</button>
+        <button class="btn btn-outline btn-sm" onclick="openEditInstructor('${instId}')">⚙️ 정보 수정</button>
+      </div>
+    </div>
+
+    <div class="profile-card">
+      <div class="profile-avatar" style="background:${avatarColor}">${initials}</div>
+      <div class="profile-info">
+        <h2>${inst.name}</h2>
+        <p>${inst.phone || '연락처 없음'}${inst.field ? ' · ' + inst.field : ''}</p>
+        <div class="profile-badges">
+          <span class="profile-badge">수수료율 ${inst.commissionRate}%</span>
+          <span class="profile-badge">총 ${recs.length}건 강의</span>
+          ${inst.memo ? `<span class="profile-badge">${inst.memo}</span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card blue"><div class="stat-label">총 강사비</div><div class="stat-value">${won(totalFee)}</div><div class="stat-sub">${recs.length}건 합산</div></div>
+      <div class="stat-card orange"><div class="stat-label">총 경비 차감</div><div class="stat-value">${won(totalExp)}</div><div class="stat-sub">경비 합산</div></div>
+      <div class="stat-card red"><div class="stat-label">회사 수수료 합계</div><div class="stat-value">${won(totalComm)}</div><div class="stat-sub">수수료율 ${inst.commissionRate}%</div></div>
+      <div class="stat-card green"><div class="stat-label">강사 지급 합계</div><div class="stat-value">${won(totalPay)}</div><div class="stat-sub">평균 ${won(avgPay)}/건</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div class="card">
+        <div class="card-title">📅 월별 지급 현황 <span style="font-size:11px;color:#a0aec0;font-weight:400">(최근 6개월)</span></div>
+        ${monthlyRows}
+      </div>
+      <div class="card">
+        <div class="card-title">📊 정산 요약</div>
+        <div style="font-size:13px;color:#4a5568;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f4f8">
+            <span>총 강의 횟수</span><strong>${recs.length}건</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f4f8">
+            <span>총 강사비</span><strong>${won(totalFee)}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f4f8">
+            <span>총 경비 차감</span><strong style="color:#e53e3e">-${won(totalExp)}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f4f8">
+            <span>순 강사비 합계</span><strong>${won(totalFee - totalExp)}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f4f8">
+            <span>회사 수수료 (${inst.commissionRate}%)</span><strong style="color:#c53030">-${won(totalComm)}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:10px 0;background:#f0fff4;margin:0 -4px;padding-left:8px;padding-right:8px;border-radius:8px">
+            <span style="font-weight:600">✅ 총 지급액</span><strong style="color:#38a169;font-size:16px">${won(totalPay)}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 강의 내역 전체</div>
+      ${recsHtml}
+    </div>
+  `;
+}
+
+function deleteRecordFromDetail(recId, instId) {
+  if (!confirm('이 정산 내역을 삭제하시겠습니까?')) return;
+  data.records = data.records.filter(r => r.id !== recId);
+  _selectedRecIds.delete(recId);
+  save();
+  renderInstructorDetail(instId);
+}
+
+// ===== 체크박스 선택 관리 =====
+let _selectedRecIds = new Set();
+
+function toggleRecordSelect(recId, instId) {
+  if (_selectedRecIds.has(recId)) _selectedRecIds.delete(recId);
+  else _selectedRecIds.add(recId);
+  const row = document.getElementById('row-' + recId);
+  if (row) row.classList.toggle('selected-row', _selectedRecIds.has(recId));
+  updateDetailActionBar(instId);
+}
+
+function toggleAllRecords(instId, checked) {
+  const recs = data.records.filter(r => r.instructorId === instId);
+  recs.forEach(r => {
+    if (checked) _selectedRecIds.add(r.id);
+    else _selectedRecIds.delete(r.id);
+    const chk = document.getElementById('chk-' + r.id);
+    const row = document.getElementById('row-' + r.id);
+    if (chk) chk.checked = checked;
+    if (row) row.classList.toggle('selected-row', checked);
+  });
+  updateDetailActionBar(instId);
+}
+
+function clearSelection(instId) {
+  _selectedRecIds.clear();
+  document.querySelectorAll('.rec-checkbox').forEach(c => c.checked = false);
+  document.querySelectorAll('tr[id^="row-"]').forEach(r => r.classList.remove('selected-row'));
+  updateDetailActionBar(instId);
+}
+
+function updateDetailActionBar(instId) {
+  const bar = document.getElementById('detail-action-bar');
+  const label = document.getElementById('sel-count-label');
+  if (!bar || !label) return;
+  const count = _selectedRecIds.size;
+  bar.classList.toggle('visible', count > 0);
+  label.textContent = `${count}건 선택됨`;
+  const chkAll = document.getElementById('chk-all');
+  if (chkAll) {
+    const total = data.records.filter(r => r.instructorId === instId).length;
+    chkAll.indeterminate = count > 0 && count < total;
+    chkAll.checked = count > 0 && count === total;
+  }
+}
+
+// ===== 명세서 출력 (인쇄 / PDF 저장) =====
+function printStatement(instId) {
+  const inst = data.instructors.find(i => i.id === instId);
+  const selRecs = data.records.filter(r => _selectedRecIds.has(r.id)).sort((a,b) => a.date.localeCompare(b.date));
+  if (selRecs.length === 0) return alert('출력할 항목을 먼저 선택하세요');
+
+  const totalFee  = selRecs.reduce((s,r) => s + r.fee, 0);
+  const totalExp  = selRecs.reduce((s,r) => s + r.totalExpenses, 0);
+  const totalNet  = selRecs.reduce((s,r) => s + r.netFee, 0);
+  const totalComm = selRecs.reduce((s,r) => s + r.commission, 0);
+  const totalPay  = selRecs.reduce((s,r) => s + r.instructorPay, 0);
+  const today = new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric'});
+  const period = selRecs.length > 1
+    ? `${selRecs[0].date} ~ ${selRecs[selRecs.length-1].date}`
+    : selRecs[0].date;
+
+  const rows = selRecs.map((r, i) => {
+    const expDetail = r.expenses.length > 0
+      ? r.expenses.map(e => `${e.name} ${Number(e.amount).toLocaleString()}`).join(', ')
+      : '-';
+    return `<tr>
+      <td style="text-align:center">${i+1}</td>
+      <td>${r.date}</td>
+      <td>${r.title || '-'}</td>
+      <td>${r.place || '-'}</td>
+      <td style="text-align:right">${Number(r.fee).toLocaleString()}</td>
+      <td style="text-align:right;color:#c0392b">${r.totalExpenses > 0 ? '-' + Number(r.totalExpenses).toLocaleString() : '-'}</td>
+      <td style="font-size:10px;color:#666">${expDetail}</td>
+      <td style="text-align:right">${Number(r.netFee).toLocaleString()}</td>
+      <td style="text-align:right;color:#c0392b">${Number(r.commission).toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700">${Number(r.instructorPay).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+  <title>강의료 지급 명세서 - ${inst.name}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; font-size: 12px; color: #1a1a1a; background: white; padding: 20mm 15mm; }
+    .header { text-align: center; margin-bottom: 24px; border-bottom: 3px double #1a365d; padding-bottom: 16px; }
+    .header .company { font-size: 13px; color: #555; margin-bottom: 6px; }
+    .header h1 { font-size: 22px; font-weight: 900; letter-spacing: 6px; color: #1a365d; }
+    .header .period { font-size: 12px; color: #777; margin-top: 6px; }
+    .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    .info-table td { padding: 7px 10px; border: 1px solid #ccc; }
+    .info-table .label { background: #f0f4f8; font-weight: 700; width: 100px; text-align: center; color: #2d3748; }
+    .main-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }
+    .main-table th { background: #1a365d; color: white; padding: 7px 5px; text-align: center; border: 1px solid #0f2444; white-space: nowrap; }
+    .main-table td { padding: 6px 5px; border: 1px solid #ddd; vertical-align: middle; }
+    .main-table tbody tr:nth-child(even) td { background: #f8fafc; }
+    .main-table tfoot td { background: #edf2f7; font-weight: 700; padding: 8px 5px; border: 1px solid #bbb; }
+    .summary { display: flex; justify-content: flex-end; margin-bottom: 28px; }
+    .summary-box { border: 2px solid #1a365d; border-radius: 6px; padding: 14px 20px; min-width: 300px; }
+    .summary-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; border-bottom: 1px solid #eee; }
+    .summary-row:last-child { border-bottom: none; font-size: 15px; font-weight: 900; color: #1a365d; padding-top: 10px; margin-top: 4px; }
+    .sign-area { display: flex; justify-content: space-between; margin-top: 32px; padding-top: 20px; border-top: 1px solid #ccc; }
+    .sign-box { text-align: center; }
+    .sign-box .sign-title { font-size: 13px; font-weight: 700; margin-bottom: 36px; }
+    .sign-box .sign-line { border-top: 1px solid #333; width: 160px; padding-top: 4px; font-size: 11px; color: #666; }
+    .confirm-text { text-align: center; font-size: 13px; margin-bottom: 20px; }
+    @media print {
+      body { padding: 0; }
+      @page { size: A4; margin: 15mm; }
+    }
+  </style></head><body>
+  <div class="header">
+    <div class="company">(주)케이아그로솔루션즈</div>
+    <h1>강 의 료 지 급 명 세 서</h1>
+    <div class="period">지급 기간: ${period}</div>
+  </div>
+
+  <table class="info-table">
+    <tr>
+      <td class="label">성 명</td><td>${inst.name}</td>
+      <td class="label">분 야</td><td>${inst.field || '-'}</td>
+      <td class="label">연락처</td><td>${inst.phone || '-'}</td>
+    </tr>
+    <tr>
+      <td class="label">수수료율</td><td>${inst.commissionRate}%</td>
+      <td class="label">강의 건수</td><td>${selRecs.length}건</td>
+      <td class="label">메 모</td><td>${inst.memo || '-'}</td>
+    </tr>
+  </table>
+
+  <table class="main-table">
+    <thead><tr>
+      <th style="width:28px">No.</th>
+      <th style="width:80px">날짜</th>
+      <th>강의명</th>
+      <th style="width:80px">장소</th>
+      <th style="width:72px">총 강사비</th>
+      <th style="width:68px">경비차감</th>
+      <th style="width:140px">경비 내역</th>
+      <th style="width:72px">순 강사비</th>
+      <th style="width:68px">수수료<br>(${inst.commissionRate}%)</th>
+      <th style="width:72px">지급액</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr>
+      <td colspan="4" style="text-align:center">합  계</td>
+      <td style="text-align:right">${Number(totalFee).toLocaleString()}</td>
+      <td style="text-align:right;color:#c0392b">-${Number(totalExp).toLocaleString()}</td>
+      <td></td>
+      <td style="text-align:right">${Number(totalNet).toLocaleString()}</td>
+      <td style="text-align:right;color:#c0392b">${Number(totalComm).toLocaleString()}</td>
+      <td style="text-align:right;color:#1a365d">${Number(totalPay).toLocaleString()}</td>
+    </tr></tfoot>
+  </table>
+
+  <div class="summary">
+    <div class="summary-box">
+      <div class="summary-row"><span>총 강사비</span><span>${Number(totalFee).toLocaleString()}원</span></div>
+      <div class="summary-row"><span>경비 차감</span><span style="color:#c0392b">- ${Number(totalExp).toLocaleString()}원</span></div>
+      <div class="summary-row"><span>순 강사비</span><span>${Number(totalNet).toLocaleString()}원</span></div>
+      <div class="summary-row"><span>회사 수수료 (${inst.commissionRate}%)</span><span style="color:#c0392b">- ${Number(totalComm).toLocaleString()}원</span></div>
+      <div class="summary-row"><span>✅ 최종 지급액</span><span>${Number(totalPay).toLocaleString()}원</span></div>
+    </div>
+  </div>
+
+  <div class="confirm-text">위와 같이 강의료를 지급함을 확인합니다.<br><br>${today}</div>
+
+  <div class="sign-area">
+    <div class="sign-box">
+      <div class="sign-title">(주)케이아그로솔루션즈</div>
+      <div class="sign-line">담당자 확인 (인)</div>
+    </div>
+    <div class="sign-box">
+      <div class="sign-title">강사 수령 확인</div>
+      <div class="sign-line">${inst.name} (인)</div>
+    </div>
+  </div>
+  <script>window.onload = function(){ window.print(); }<\/script>
+  </body></html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=800');
+  if (!win) return alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.');
+  win.document.write(html);
+  win.document.close();
+}
+
+// ===== 엑셀 다운로드 =====
+function downloadExcel(instId) {
+  const inst = data.instructors.find(i => i.id === instId);
+  const selRecs = data.records.filter(r => _selectedRecIds.has(r.id)).sort((a,b) => a.date.localeCompare(b.date));
+  if (selRecs.length === 0) return alert('다운로드할 항목을 먼저 선택하세요');
+
+  const totalFee  = selRecs.reduce((s,r) => s + r.fee, 0);
+  const totalExp  = selRecs.reduce((s,r) => s + r.totalExpenses, 0);
+  const totalNet  = selRecs.reduce((s,r) => s + r.netFee, 0);
+  const totalComm = selRecs.reduce((s,r) => s + r.commission, 0);
+  const totalPay  = selRecs.reduce((s,r) => s + r.instructorPay, 0);
+
+  const rows = selRecs.map((r, i) => {
+    const expDetail = r.expenses.map(e => `${e.name} ${Number(e.amount).toLocaleString()}원`).join(' / ') || '-';
+    return `<tr>
+      <td>${i+1}</td>
+      <td>${r.date}</td>
+      <td>${r.title || '-'}</td>
+      <td>${r.place || '-'}</td>
+      <td style="mso-number-format:'#,##0'">${r.fee}</td>
+      <td style="mso-number-format:'#,##0'">${-r.totalExpenses}</td>
+      <td>${expDetail}</td>
+      <td style="mso-number-format:'#,##0'">${r.netFee}</td>
+      <td style="mso-number-format:'#,##0'">${r.commission}</td>
+      <td style="mso-number-format:'#,##0';font-weight:bold">${r.instructorPay}</td>
+    </tr>`;
+  }).join('');
+
+  const xls = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+  <head><meta charset="UTF-8">
+  <style>
+    body { font-family: '맑은 고딕', Arial; font-size: 11pt; }
+    table { border-collapse: collapse; width: 100%; }
+    th { background: #1a365d; color: white; text-align: center; padding: 6px 8px; border: 1px solid #999; font-size: 11pt; }
+    td { padding: 5px 8px; border: 1px solid #ccc; vertical-align: middle; font-size: 10pt; }
+    .info-label { background: #dbeafe; font-weight: bold; text-align: center; width: 80px; }
+    .total-row td { background: #fef3c7; font-weight: bold; border: 1px solid #999; }
+    h2 { color: #1a365d; font-size: 16pt; margin-bottom: 8px; }
+    .sub { font-size: 10pt; color: #666; margin-bottom: 16px; }
+  </style></head><body>
+  <h2>강의료 지급 명세서</h2>
+  <p class="sub">강사: ${inst.name} | 수수료율: ${inst.commissionRate}% | 강의 건수: ${selRecs.length}건</p>
+  <table style="margin-bottom:16px;width:auto">
+    <tr>
+      <td class="info-label">성 명</td><td>${inst.name}</td>
+      <td class="info-label">분 야</td><td>${inst.field||'-'}</td>
+      <td class="info-label">연락처</td><td>${inst.phone||'-'}</td>
+      <td class="info-label">수수료율</td><td>${inst.commissionRate}%</td>
+    </tr>
+  </table>
+  <table>
+    <thead><tr>
+      <th>No.</th><th>날짜</th><th>강의명</th><th>장소</th>
+      <th>총 강사비(원)</th><th>경비차감(원)</th><th>경비 내역</th>
+      <th>순 강사비(원)</th><th>수수료(원)</th><th>지급액(원)</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tr class="total-row">
+      <td colspan="4" style="text-align:center">합 계</td>
+      <td style="mso-number-format:'#,##0';text-align:right">${totalFee}</td>
+      <td style="mso-number-format:'#,##0';text-align:right">${-totalExp}</td>
+      <td></td>
+      <td style="mso-number-format:'#,##0';text-align:right">${totalNet}</td>
+      <td style="mso-number-format:'#,##0';text-align:right">${totalComm}</td>
+      <td style="mso-number-format:'#,##0';text-align:right;color:#1a365d">${totalPay}</td>
+    </tr>
+  </table>
+  </body></html>`;
+
+  const blob = new Blob(['﻿' + xls], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toLocaleDateString('ko-KR').replace(/\. /g,'-').replace('.','');
+  a.href = url;
+  a.download = `강의료명세서_${inst.name}_${dateStr}.xls`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function showRegisterFor(instId) {
+  showPage('register');
+  setTimeout(() => {
+    document.getElementById('reg-instructor').value = instId;
+    calcPreview();
+  }, 50);
+}
+
+// ===== Instructors =====
+function addInstructor() {
+  const name = document.getElementById('inst-name').value.trim();
+  const rate = parseFloat(document.getElementById('inst-rate').value);
+  if (!name) return alert('강사명을 입력하세요');
+  if (isNaN(rate) || rate < 0 || rate > 100) return alert('수수료율을 올바르게 입력하세요 (0~100)');
+
+  data.instructors.push({
+    id: genId(), name,
+    phone: document.getElementById('inst-phone').value.trim(),
+    commissionRate: rate,
+    field: document.getElementById('inst-field').value.trim(),
+    memo: document.getElementById('inst-memo').value.trim(),
+    createdAt: new Date().toISOString()
+  });
+  save();
+  ['inst-name','inst-phone','inst-rate','inst-field','inst-memo'].forEach(id => document.getElementById(id).value = '');
+  renderInstructors();
+  renderSidebar();
+}
+
+function renderInstructors() {
+  const tbody = document.querySelector('#instructor-table tbody');
+  if (data.instructors.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">👤</div><p>등록된 강사가 없습니다. 위에서 강사를 등록해주세요.</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.instructors.map(inst => {
+    const count = data.records.filter(r => r.instructorId === inst.id).length;
+    const ci = Math.min(Math.floor(inst.commissionRate / 20), 4);
+    const colorClass = ['badge-blue','badge-green','badge-orange','badge-purple','badge-red'][ci];
+    return `<tr>
+      <td><strong style="color:#3182ce;cursor:pointer" onclick="showInstructorDashboard('${inst.id}')">${inst.name}</strong></td>
+      <td>${inst.phone || '-'}</td>
+      <td>${inst.field ? `<span class="badge badge-gray">${inst.field}</span>` : '-'}</td>
+      <td><span class="badge ${colorClass}">${inst.commissionRate}%</span></td>
+      <td>${count}건</td>
+      <td style="font-size:12px;color:#718096">${inst.memo || '-'}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openEditInstructor('${inst.id}')">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteInstructor('${inst.id}')" style="margin-left:4px">삭제</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function deleteInstructor(id) {
+  const inst = data.instructors.find(i => i.id === id);
+  if (!inst) return;
+  const count = data.records.filter(r => r.instructorId === id).length;
+  let msg = `${inst.name} 강사를 삭제하시겠습니까?`;
+  if (count > 0) msg += `\n\n⚠️ 이 강사의 정산 내역 ${count}건도 함께 삭제됩니다.`;
+  if (!confirm(msg)) return;
+  data.instructors = data.instructors.filter(i => i.id !== id);
+  data.records = data.records.filter(r => r.instructorId !== id);
+  save();
+  renderInstructors();
+  renderSidebar();
+}
+
+function openEditInstructor(id) {
+  const inst = data.instructors.find(i => i.id === id);
+  if (!inst) return;
+  document.getElementById('edit-inst-id').value = inst.id;
+  document.getElementById('edit-inst-name').value = inst.name;
+  document.getElementById('edit-inst-phone').value = inst.phone || '';
+  document.getElementById('edit-inst-rate').value = inst.commissionRate;
+  document.getElementById('edit-inst-field').value = inst.field || '';
+  document.getElementById('edit-inst-memo').value = inst.memo || '';
+  document.getElementById('edit-instructor-modal').classList.add('open');
+}
+
+function saveEditInstructor() {
+  const id = document.getElementById('edit-inst-id').value;
+  const inst = data.instructors.find(i => i.id === id);
+  if (!inst) return;
+  const rate = parseFloat(document.getElementById('edit-inst-rate').value);
+  if (isNaN(rate) || rate < 0 || rate > 100) return alert('수수료율을 올바르게 입력하세요');
+  inst.name = document.getElementById('edit-inst-name').value.trim();
+  inst.phone = document.getElementById('edit-inst-phone').value.trim();
+  inst.commissionRate = rate;
+  inst.field = document.getElementById('edit-inst-field').value.trim();
+  inst.memo = document.getElementById('edit-inst-memo').value.trim();
+  save();
+  closeModal('edit-instructor-modal');
+  renderSidebar();
+  // 현재 해당 강사 대시보드에 있으면 리렌더
+  if (currentPage === 'instructor-' + id) renderInstructorDetail(id);
+  else renderInstructors();
+}
+
+// ===== Register =====
+function initRegister() {
+  const sel = document.getElementById('reg-instructor');
+  const curVal = sel.value;
+  sel.innerHTML = '<option value="">강사를 선택하세요</option>';
+  data.instructors.forEach(inst => {
+    sel.innerHTML += `<option value="${inst.id}">${inst.name} (수수료 ${inst.commissionRate}%)</option>`;
+  });
+  if (curVal) sel.value = curVal;
+  if (!document.getElementById('reg-date').value) {
+    document.getElementById('reg-date').value = new Date().toISOString().slice(0,10);
+  }
+  if (document.getElementById('expense-list').children.length === 0) {
+    addExpenseRow('점심값','');
+    addExpenseRow('고속도로 통행료','');
+    addExpenseRow('기름값 (주유비)','');
+  }
+  calcPreview();
+}
+
+function addExpenseRow(name='', amount='') {
+  const list = document.getElementById('expense-list');
+  const div = document.createElement('div');
+  div.className = 'expense-item';
+  div.innerHTML = `
+    <input type="text" placeholder="경비 항목명 (예: 점심값)" value="${name}" oninput="calcPreview()">
+    <div class="input-suffix amount-input">
+      <span>원</span>
+      <input type="number" placeholder="0" value="${amount}" oninput="calcPreview()" min="0">
+    </div>
+    <button class="btn btn-outline btn-icon" onclick="removeExpenseRow(this)" title="삭제">✕</button>
+  `;
+  list.appendChild(div);
+}
+
+function removeExpenseRow(btn) { btn.parentElement.remove(); calcPreview(); }
+function onInstructorSelect() { calcPreview(); }
+
+function getExpenses() {
+  const items = [];
+  document.querySelectorAll('#expense-list .expense-item').forEach(row => {
+    const name = row.querySelector('input[type=text]').value.trim();
+    const amount = parseFloat(row.querySelector('input[type=number]').value) || 0;
+    if (name || amount > 0) items.push({ name: name || '경비', amount });
+  });
+  return items;
+}
+
+function calcPreview() {
+  const instId = document.getElementById('reg-instructor').value;
+  const fee = parseFloat(document.getElementById('reg-fee').value) || 0;
+  const expenses = getExpenses();
+  const totalExp = expenses.reduce((s,e)=>s+e.amount,0);
+  const netFee = Math.max(0, fee - totalExp);
+  const box = document.getElementById('calc-preview-box');
+  if (!instId || fee === 0) {
+    box.innerHTML = '<div class="alert alert-info">강사와 강사비를 입력하면 자동으로 계산됩니다</div>';
+    return;
+  }
+  const inst = data.instructors.find(i=>i.id===instId);
+  if (!inst) return;
+  const commAmt = Math.round(netFee * inst.commissionRate / 100);
+  const payAmt = netFee - commAmt;
+  const expLines = expenses.length > 0
+    ? expenses.map(e=>`<div class="line"><span>  • ${e.name}</span><span style="color:#e53e3e">-${won(e.amount)}</span></div>`).join('')
+    : '<div class="line" style="color:#a0aec0"><span>  (경비 없음)</span><span>-</span></div>';
+  box.innerHTML = `
+    <div class="calc-preview">
+      <div class="line"><span>총 강사비</span><span><strong>${won(fee)}</strong></span></div>
+      <div class="divider"></div>
+      <div class="line" style="color:#718096;font-size:11.5px"><span>경비 차감 항목</span></div>
+      ${expLines}
+      <div class="divider"></div>
+      <div class="line"><span>순 강사비 (경비 차감 후)</span><span><strong>${won(netFee)}</strong></span></div>
+      <div class="divider"></div>
+      <div class="line" style="color:#e53e3e"><span>회사 수수료 (${inst.commissionRate}%)</span><span>-${won(commAmt)}</span></div>
+      <div class="divider" style="border-top:2px solid #4299e1;margin:7px 0"></div>
+      <div class="line" style="font-size:15px;color:#38a169;font-weight:700"><span>✅ 강사 지급액</span><span>${won(payAmt)}</span></div>
+    </div>
+    <div style="margin-top:10px;padding:9px 12px;background:#fff5f5;border-radius:8px;font-size:12px;color:#c53030">
+      회사 수수료: <strong>${won(commAmt)}</strong> (${inst.commissionRate}% of ${won(netFee)})
+    </div>`;
+}
+
+// ===== 첨부파일 =====
+let _pendingAttachments = []; // { name, size, type, dataUrl }
+
+function getFileIcon(type) {
+  if (type.startsWith('image/')) return '🖼️';
+  if (type === 'application/pdf') return '📄';
+  if (type.includes('word') || type.includes('document')) return '📝';
+  if (type.includes('excel') || type.includes('sheet')) return '📊';
+  return '📎';
+}
+function formatBytes(b) {
+  if (b < 1024) return b + 'B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + 'KB';
+  return (b/(1024*1024)).toFixed(1) + 'MB';
+}
+
+function addAttachments(files) {
+  Array.from(files).forEach(file => {
+    if (file.size > 2 * 1024 * 1024) { alert(`"${file.name}" 파일이 2MB를 초과합니다.`); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      _pendingAttachments.push({ name: file.name, size: file.size, type: file.type, dataUrl: e.target.result });
+      renderAttachmentList();
+    };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById('file-input').value = '';
+}
+
+function handleFileDrop(e) {
+  e.preventDefault();
+  document.getElementById('attachment-drop').classList.remove('dragover');
+  addAttachments(e.dataTransfer.files);
+}
+
+function removeAttachment(idx) {
+  _pendingAttachments.splice(idx, 1);
+  renderAttachmentList();
+}
+
+function renderAttachmentList() {
+  const list = document.getElementById('attachment-list');
+  if (!list) return;
+  list.innerHTML = _pendingAttachments.map((f, i) => `
+    <div class="attachment-item">
+      <span class="attachment-item-icon">${getFileIcon(f.type)}</span>
+      <span class="attachment-item-name" title="${f.name}">${f.name}</span>
+      <span class="attachment-item-size">${formatBytes(f.size)}</span>
+      <button class="attachment-item-del" onclick="removeAttachment(${i})" title="삭제">✕</button>
+    </div>
+  `).join('');
+}
+
+function renderSavedAttachments(attachments) {
+  if (!attachments || attachments.length === 0) return '';
+  return attachments.map(f => `
+    <div class="attachment-item">
+      <span class="attachment-item-icon">${getFileIcon(f.type)}</span>
+      <a href="${f.dataUrl}" download="${f.name}" class="attachment-item-name" title="${f.name}" style="color:#3182ce;text-decoration:none">${f.name}</a>
+      <span class="attachment-item-size">${formatBytes(f.size)}</span>
+    </div>
+  `).join('');
+}
+
+function saveRecord() {
+  const instId = document.getElementById('reg-instructor').value;
+  const date = document.getElementById('reg-date').value;
+  const fee = parseFloat(document.getElementById('reg-fee').value);
+  if (!instId) return alert('강사를 선택하세요');
+  if (!date) return alert('날짜를 입력하세요');
+  if (!fee || fee <= 0) return alert('강사비를 입력하세요');
+  const inst = data.instructors.find(i=>i.id===instId);
+  const expenses = getExpenses();
+  const totalExp = expenses.reduce((s,e)=>s+e.amount,0);
+  const netFee = Math.max(0, fee - totalExp);
+  const commission = Math.round(netFee * inst.commissionRate / 100);
+  const instructorPay = netFee - commission;
+  data.records.push({
+    id: genId(), instructorId: instId, date,
+    title: document.getElementById('reg-title').value.trim(),
+    place: document.getElementById('reg-place').value.trim(),
+    fee, expenses, totalExpenses: totalExp, netFee,
+    commissionRate: inst.commissionRate, commission, instructorPay,
+    memo: document.getElementById('reg-memo').value.trim(),
+    attachments: [..._pendingAttachments],
+    createdAt: new Date().toISOString()
+  });
+  save();
+  _pendingAttachments = [];
+  renderAttachmentList();
+  document.getElementById('reg-fee').value = '';
+  document.getElementById('reg-title').value = '';
+  document.getElementById('reg-place').value = '';
+  document.getElementById('reg-memo').value = '';
+  document.getElementById('expense-list').innerHTML = '';
+  addExpenseRow('점심값',''); addExpenseRow('고속도로 통행료',''); addExpenseRow('기름값 (주유비)','');
+  calcPreview();
+  alert(`✅ 저장 완료!\n${inst.name} 강사 지급액: ${won(instructorPay)}\n회사 수수료: ${won(commission)}`);
+  showInstructorDashboard(instId);
+}
+
+// ===== History =====
+function renderHistory() {
+  const filterSel = document.getElementById('filter-instructor');
+  const curFilter = filterSel.value;
+  filterSel.innerHTML = '<option value="">전체 강사</option>';
+  data.instructors.forEach(inst => {
+    filterSel.innerHTML += `<option value="${inst.id}" ${curFilter===inst.id?'selected':''}>${inst.name}</option>`;
+  });
+  const filterInst = document.getElementById('filter-instructor').value;
+  const filterMonth = document.getElementById('filter-month').value;
+  let records = [...data.records].sort((a,b)=>b.date.localeCompare(a.date));
+  if (filterInst) records = records.filter(r=>r.instructorId===filterInst);
+  if (filterMonth) records = records.filter(r=>r.date.startsWith(filterMonth));
+  document.getElementById('history-count').textContent = `${records.length}건 조회됨`;
+  const tbody = document.querySelector('#history-table tbody');
+  if (records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="icon">📋</div><p>조회된 내역이 없습니다</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = records.map(r => {
+    const inst = data.instructors.find(i=>i.id===r.instructorId);
+    return `<tr>
+      <td style="font-size:11.5px;color:#718096;white-space:nowrap">${r.date}</td>
+      <td><strong>${inst?inst.name:'(삭제됨)'}</strong></td>
+      <td style="font-size:13px">${r.title||'-'}</td>
+      <td style="text-align:right">${won(r.fee)}</td>
+      <td style="text-align:right;color:#e53e3e">${r.totalExpenses>0?'-'+won(r.totalExpenses):'-'}</td>
+      <td style="text-align:right">${won(r.netFee)}</td>
+      <td style="text-align:center"><span class="badge badge-purple">${r.commissionRate}%</span></td>
+      <td style="text-align:right;color:#c53030">${won(r.commission)}</td>
+      <td style="text-align:right;color:#276749"><strong>${won(r.instructorPay)}</strong></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="showDetail('${r.id}')">상세</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteRecord('${r.id}')" style="margin-left:4px">삭제</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function clearFilters() {
+  document.getElementById('filter-instructor').value = '';
+  document.getElementById('filter-month').value = '';
+  renderHistory();
+}
+
+function deleteRecord(id) {
+  if (!confirm('이 정산 내역을 삭제하시겠습니까?')) return;
+  data.records = data.records.filter(r=>r.id!==id);
+  save(); renderHistory();
+}
+
+function showDetail(id) {
+  const r = data.records.find(rec=>rec.id===id);
+  if (!r) return;
+  const inst = data.instructors.find(i=>i.id===r.instructorId);
+  const expHtml = r.expenses.length > 0
+    ? r.expenses.map(e=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px"><span>  • ${e.name}</span><span style="color:#e53e3e">-${won(e.amount)}</span></div>`).join('')
+    : '<div style="color:#a0aec0;font-size:13px;padding:4px 0">경비 없음</div>';
+  document.getElementById('detail-modal-body').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><div style="font-size:11px;color:#a0aec0">강사명</div><div style="font-weight:600">${inst?inst.name:'(삭제됨)'}</div></div>
+        <div><div style="font-size:11px;color:#a0aec0">날짜</div><div>${r.date}</div></div>
+        <div><div style="font-size:11px;color:#a0aec0">강의명</div><div>${r.title||'-'}</div></div>
+        <div><div style="font-size:11px;color:#a0aec0">장소</div><div>${r.place||'-'}</div></div>
+      </div>
+      <div class="summary-box">
+        <div class="summary-row"><span>총 강사비</span><span class="summary-value">${won(r.fee)}</span></div>
+        ${r.expenses.length>0?`<div style="padding:5px 0;font-size:12px;opacity:0.8">${expHtml}</div>`:''}
+        <div class="summary-row" style="color:#ffb3b3"><span>총 경비 차감</span><span class="summary-value">-${won(r.totalExpenses)}</span></div>
+        <div class="summary-row highlight"><span>순 강사비</span><span class="summary-value">${won(r.netFee)}</span></div>
+        <div class="summary-row" style="color:#ffb3b3"><span>회사 수수료 (${r.commissionRate}%)</span><span class="summary-value">-${won(r.commission)}</span></div>
+        <div class="summary-row total"><span>✅ 강사 지급액</span><span>${won(r.instructorPay)}</span></div>
+      </div>
+      ${r.memo?`<div><div style="font-size:11px;color:#a0aec0;margin-bottom:4px">메모</div><div style="font-size:13px;color:#4a5568">${r.memo}</div></div>`:''}
+    </div>`;
+  document.getElementById('detail-modal').classList.add('open');
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ===== Expense Presets =====
+const PRESET_ICONS = ['🏙️','🏢','🏫','🏨','🎪','🏟️','🌆','🏔️','🌊','🏝️'];
+
+function togglePresetDropdown() {
+  const dd = document.getElementById('preset-dropdown');
+  const isOpen = dd.classList.contains('open');
+  if (isOpen) { closePresetDropdown(); return; }
+  renderPresetDropdown();
+  dd.classList.add('open');
+  setTimeout(() => document.addEventListener('click', outsidePresetClick), 10);
+}
+
+function closePresetDropdown() {
+  document.getElementById('preset-dropdown').classList.remove('open');
+  document.removeEventListener('click', outsidePresetClick);
+}
+
+function outsidePresetClick(e) {
+  if (!document.getElementById('preset-picker').contains(e.target)) closePresetDropdown();
+}
+
+function renderPresetDropdown() {
+  const list = document.getElementById('preset-list');
+  if (data.expensePresets.length === 0) {
+    list.innerHTML = `<div class="preset-empty">
+      저장된 장소가 없습니다<br>
+      <span style="font-size:11px">"관리" 버튼을 눌러 장소를 추가하세요</span>
+    </div>`;
+    return;
+  }
+  list.innerHTML = data.expensePresets.map((p, idx) => {
+    const total = p.expenses.reduce((s, e) => s + e.amount, 0);
+    const itemNames = p.expenses.map(e => e.name).join(', ');
+    const icon = PRESET_ICONS[idx % PRESET_ICONS.length];
+    return `<div class="preset-option" onclick="applyPreset('${p.id}')">
+      <div class="preset-option-icon">${icon}</div>
+      <div class="preset-option-info">
+        <div class="preset-option-name">${p.name}</div>
+        <div class="preset-option-detail">${itemNames}</div>
+      </div>
+      <div class="preset-option-total">-${won(total)}</div>
+    </div>`;
+  }).join('');
+}
+
+function applyPreset(presetId) {
+  const preset = data.expensePresets.find(p => p.id === presetId);
+  if (!preset) return;
+  document.getElementById('expense-list').innerHTML = '';
+  preset.expenses.forEach(e => addExpenseRow(e.name, e.amount));
+  calcPreview();
+  closePresetDropdown();
+}
+
+function clearExpenses() {
+  document.getElementById('expense-list').innerHTML = '';
+  calcPreview();
+}
+
+// 프리셋 관리 모달 열기
+function openPresetMgmt() {
+  // 새 프리셋 입력 초기화
+  document.getElementById('preset-name').value = '';
+  const el = document.getElementById('preset-expense-list');
+  el.innerHTML = '';
+  addPresetExpenseRow('점심값', '');
+  addPresetExpenseRow('고속도로 통행료', '');
+  addPresetExpenseRow('기름값 (주유비)', '');
+  renderPresetMgmtList();
+  document.getElementById('preset-mgmt-modal').classList.add('open');
+}
+
+function addPresetExpenseRow(name = '', amount = '') {
+  const list = document.getElementById('preset-expense-list');
+  const div = document.createElement('div');
+  div.className = 'expense-item';
+  div.innerHTML = `
+    <input type="text" placeholder="항목명 (예: 점심값)" value="${name}">
+    <div class="input-suffix amount-input">
+      <span>원</span>
+      <input type="number" placeholder="0" value="${amount}" min="0">
+    </div>
+    <button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">✕</button>
+  `;
+  list.appendChild(div);
+}
+
+function addEditPresetExpenseRow(name = '', amount = '') {
+  const list = document.getElementById('edit-preset-expense-list');
+  const div = document.createElement('div');
+  div.className = 'expense-item';
+  div.innerHTML = `
+    <input type="text" placeholder="항목명" value="${name}">
+    <div class="input-suffix amount-input">
+      <span>원</span>
+      <input type="number" placeholder="0" value="${amount}" min="0">
+    </div>
+    <button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">✕</button>
+  `;
+  list.appendChild(div);
+}
+
+function getPresetExpenses(listId) {
+  const items = [];
+  document.querySelectorAll(`#${listId} .expense-item`).forEach(row => {
+    const name = row.querySelector('input[type=text]').value.trim();
+    const amount = parseFloat(row.querySelector('input[type=number]').value) || 0;
+    if (name || amount > 0) items.push({ name: name || '경비', amount });
+  });
+  return items;
+}
+
+function savePreset() {
+  const name = document.getElementById('preset-name').value.trim();
+  if (!name) return alert('장소명을 입력하세요');
+  const expenses = getPresetExpenses('preset-expense-list');
+  if (expenses.length === 0) return alert('경비 항목을 하나 이상 입력하세요');
+  data.expensePresets.push({ id: genId(), name, expenses });
+  save();
+  document.getElementById('preset-name').value = '';
+  document.getElementById('preset-expense-list').innerHTML = '';
+  addPresetExpenseRow('점심값', '');
+  addPresetExpenseRow('고속도로 통행료', '');
+  addPresetExpenseRow('기름값 (주유비)', '');
+  renderPresetMgmtList();
+}
+
+function renderPresetMgmtList() {
+  const el = document.getElementById('preset-mgmt-list');
+  if (data.expensePresets.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:#a0aec0;font-size:13px;padding:16px">저장된 장소가 없습니다</div>';
+    return;
+  }
+  el.innerHTML = data.expensePresets.map((p, idx) => {
+    const total = p.expenses.reduce((s, e) => s + e.amount, 0);
+    const icon = PRESET_ICONS[idx % PRESET_ICONS.length];
+    const itemsText = p.expenses.map(e => `${e.name} ${won(e.amount)}`).join(' · ');
+    return `<div class="preset-mgmt-item">
+      <div style="font-size:22px">${icon}</div>
+      <div class="preset-mgmt-info">
+        <div class="preset-mgmt-name">${p.name}</div>
+        <div class="preset-mgmt-items">${itemsText}</div>
+        <div style="font-size:12px;font-weight:600;color:#e53e3e;margin-top:3px">합계 ${won(total)}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-outline btn-sm" onclick="openEditPreset('${p.id}')">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="deletePreset('${p.id}')">삭제</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deletePreset(id) {
+  if (!confirm('이 장소를 삭제하시겠습니까?')) return;
+  data.expensePresets = data.expensePresets.filter(p => p.id !== id);
+  save();
+  renderPresetMgmtList();
+}
+
+function openEditPreset(id) {
+  const preset = data.expensePresets.find(p => p.id === id);
+  if (!preset) return;
+  document.getElementById('edit-preset-id').value = preset.id;
+  document.getElementById('edit-preset-name').value = preset.name;
+  const list = document.getElementById('edit-preset-expense-list');
+  list.innerHTML = '';
+  preset.expenses.forEach(e => addEditPresetExpenseRow(e.name, e.amount));
+  document.getElementById('preset-edit-modal').classList.add('open');
+}
+
+function saveEditPreset() {
+  const id = document.getElementById('edit-preset-id').value;
+  const preset = data.expensePresets.find(p => p.id === id);
+  if (!preset) return;
+  const name = document.getElementById('edit-preset-name').value.trim();
+  if (!name) return alert('장소명을 입력하세요');
+  const expenses = getPresetExpenses('edit-preset-expense-list');
+  if (expenses.length === 0) return alert('경비 항목을 하나 이상 입력하세요');
+  preset.name = name;
+  preset.expenses = expenses;
+  save();
+  closeModal('preset-edit-modal');
+  renderPresetMgmtList();
+}
+
+// ===== Init (Firebase 실시간 동기화) =====
+const _params = new URLSearchParams(location.search);
+
+// embed 모드: 사이드바 숨김
+if (_params.get('embed') === '1') {
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) sidebar.style.display = 'none';
+  const main = document.querySelector('.main');
+  if (main) { main.style.flex = '1'; main.style.width = '100%'; }
+}
+
+let _ready = false;
+_auth.signInAnonymously().then(() => {
+  // 실시간 데이터 동기화
+  _DOC.onSnapshot(snap => {
+    if (snap.exists) {
+      data = snap.data();
+    }
+    renderSidebar();
+    // 첫 로드 시에만 페이지 라우팅
+    if (!_ready) {
+      _ready = true;
+      const _initPage = _params.get('page') || 'dashboard';
+      if (_initPage === 'dashboard') renderDashboard();
+      showPage(_initPage);
+    }
+  });
+});
+</script>
+</body>
+</html>
