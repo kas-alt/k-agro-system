@@ -216,6 +216,25 @@
   .sel-count { font-size: 13px; font-weight: 600; color: #2b6cb0; }
   tr.selected-row td { background: #ebf8ff !important; }
 
+  /* Distance calculator */
+  .dist-addr-row { display: flex; gap: 7px; align-items: stretch; margin-bottom: 10px; }
+  .dist-addr-row input { flex: 1; }
+  .dist-addr-row button { flex-shrink: 0; }
+  .dist-result-box { background: linear-gradient(135deg, #ebf8ff 0%, #e6fffa 100%); border: 1.5px solid #90cdf4; border-radius: 10px; padding: 14px 16px; margin: 14px 0; display: none; }
+  .dist-result-box.visible { display: block; }
+  .dist-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .dist-result-item { text-align: center; }
+  .dist-result-label { font-size: 11px; color: #2c7a7b; font-weight: 600; margin-bottom: 3px; }
+  .dist-result-value { font-size: 18px; font-weight: 800; color: #2b6cb0; }
+  .dist-result-value.cost { color: #276749; }
+  .dist-route-info { font-size: 11.5px; color: #4a5568; margin-top: 10px; padding-top: 8px; border-top: 1px solid #bee3f8; text-align: center; }
+  .dist-options { display: flex; gap: 14px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .dist-options label { font-size: 13px; color: #4a5568; font-weight: 500; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .dist-options input[type=checkbox] { width: 15px; height: 15px; accent-color: #3182ce; cursor: pointer; }
+  .dist-options .rate-wrap { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .dist-options .rate-wrap span { font-size: 12px; color: #718096; white-space: nowrap; }
+  .dist-options .rate-wrap input { width: 80px; padding: 6px 8px; font-size: 13px; }
+
   .register-grid { display: grid; grid-template-columns: 1fr 370px; gap: 18px; align-items: start; }
   @media (max-width: 900px) {
     .sidebar { display: none; }
@@ -405,6 +424,7 @@
                       <div class="preset-list" id="preset-list"></div>
                     </div>
                   </div>
+                  <button class="btn btn-sm" onclick="openDistCalc()" style="background:#ebf8ff;color:#2b6cb0;border:1.5px solid #90cdf4;display:flex;align-items:center;gap:4px">🚗 거리 계산</button>
                   <button class="btn btn-outline btn-sm" onclick="clearExpenses()">초기화</button>
                 </div>
               </div>
@@ -531,6 +551,67 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('preset-edit-modal')">취소</button>
       <button class="btn btn-primary" onclick="saveEditPreset()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 거리 계산 모달 -->
+<div class="modal-overlay" id="dist-calc-modal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <h3>🚗 자동차 주행거리 계산</h3>
+      <button class="modal-close" onclick="closeModal('dist-calc-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:10px">
+        <label>출발지 주소</label>
+        <div class="dist-addr-row">
+          <input type="text" id="dist-from" placeholder="예: 서울특별시 중구 태평로1가 31" oninput="distResultReset()">
+          <button class="btn btn-outline btn-sm" onclick="searchAddr('from')">검색</button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>도착지 주소</label>
+        <div class="dist-addr-row">
+          <input type="text" id="dist-to" placeholder="예: 경기도 수원시 팔달구 효원로 1" oninput="distResultReset()">
+          <button class="btn btn-outline btn-sm" onclick="searchAddr('to')">검색</button>
+        </div>
+      </div>
+      <div class="dist-options">
+        <label>
+          <input type="checkbox" id="dist-roundtrip" checked onchange="distCalcIfReady()"> 왕복
+        </label>
+        <div class="rate-wrap">
+          <span>연료비 단가</span>
+          <div class="input-suffix" style="width:100px">
+            <span>원/km</span>
+            <input type="number" id="dist-rate" value="250" min="1" oninput="distCalcIfReady()">
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:11px" onclick="calcDist()" id="dist-calc-btn">📍 주행거리 계산</button>
+      <div class="dist-result-box" id="dist-result-box">
+        <div class="dist-result-grid">
+          <div class="dist-result-item">
+            <div class="dist-result-label">편도 거리</div>
+            <div class="dist-result-value" id="dist-one-way">—</div>
+          </div>
+          <div class="dist-result-item">
+            <div class="dist-result-label" id="dist-total-label">적용 거리</div>
+            <div class="dist-result-value" id="dist-total">—</div>
+          </div>
+          <div class="dist-result-item" style="grid-column:1/-1">
+            <div class="dist-result-label">예상 교통비</div>
+            <div class="dist-result-value cost" id="dist-cost">—</div>
+          </div>
+        </div>
+        <div class="dist-route-info" id="dist-route-info"></div>
+      </div>
+      <div id="dist-error" style="color:#e53e3e;font-size:13px;margin-top:10px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('dist-calc-modal')">닫기</button>
+      <button class="btn btn-success" id="dist-add-btn" style="display:none" onclick="addDistToExpense()">＋ 경비에 추가</button>
     </div>
   </div>
 </div>
@@ -1696,6 +1777,123 @@ function saveEditPreset() {
   save();
   closeModal('preset-edit-modal');
   renderPresetMgmtList();
+}
+
+// ===== 거리 계산 (Kakao Local API + OSRM) =====
+const KAKAO_KEY = 'dcbccacf6138abbc7d4c1ec499f57878';
+let _distResult = null; // { oneWayKm, totalKm, cost, label }
+
+function openDistCalc() {
+  _distResult = null;
+  document.getElementById('dist-result-box').classList.remove('visible');
+  document.getElementById('dist-add-btn').style.display = 'none';
+  document.getElementById('dist-error').style.display = 'none';
+  openModal('dist-calc-modal');
+}
+
+function distResultReset() {
+  _distResult = null;
+  document.getElementById('dist-result-box').classList.remove('visible');
+  document.getElementById('dist-add-btn').style.display = 'none';
+  document.getElementById('dist-error').style.display = 'none';
+}
+
+async function geocodeAddr(addr) {
+  const url = `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(addr)}`;
+  const res = await fetch(url, { headers: { Authorization: `KakaoAK ${KAKAO_KEY}` } });
+  if (!res.ok) throw new Error('카카오 API 오류: ' + res.status);
+  const json = await res.json();
+  const docs = json.documents;
+  if (!docs || docs.length === 0) {
+    // 주소 검색 실패 시 키워드 검색으로 재시도
+    const url2 = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(addr)}`;
+    const res2 = await fetch(url2, { headers: { Authorization: `KakaoAK ${KAKAO_KEY}` } });
+    const json2 = await res2.json();
+    if (!json2.documents || json2.documents.length === 0) throw new Error(`주소를 찾을 수 없습니다: "${addr}"`);
+    const d = json2.documents[0];
+    return { lat: parseFloat(d.y), lng: parseFloat(d.x), name: d.place_name || addr };
+  }
+  const d = docs[0];
+  const x = parseFloat(d.x), y = parseFloat(d.y);
+  return { lat: y, lng: x, name: d.address_name || addr };
+}
+
+async function getOSRMDistance(fromLat, fromLng, toLat, toLng) {
+  const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=false`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('경로 계산 실패 (OSRM 오류)');
+  const json = await res.json();
+  if (json.code !== 'Ok' || !json.routes || json.routes.length === 0) throw new Error('경로를 찾을 수 없습니다');
+  const distanceM = json.routes[0].distance;
+  const durationS = json.routes[0].duration;
+  return { km: distanceM / 1000, minutes: Math.round(durationS / 60) };
+}
+
+async function calcDist() {
+  const fromAddr = document.getElementById('dist-from').value.trim();
+  const toAddr = document.getElementById('dist-to').value.trim();
+  const rate = parseFloat(document.getElementById('dist-rate').value) || 250;
+  const roundtrip = document.getElementById('dist-roundtrip').checked;
+  const errEl = document.getElementById('dist-error');
+  const btn = document.getElementById('dist-calc-btn');
+
+  errEl.style.display = 'none';
+  if (!fromAddr || !toAddr) { errEl.textContent = '출발지와 도착지를 모두 입력해 주세요.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ 계산 중...';
+  try {
+    const [fromGeo, toGeo] = await Promise.all([geocodeAddr(fromAddr), geocodeAddr(toAddr)]);
+    const route = await getOSRMDistance(fromGeo.lat, fromGeo.lng, toGeo.lat, toGeo.lng);
+    const oneWayKm = Math.round(route.km * 10) / 10;
+    const totalKm = roundtrip ? Math.round(oneWayKm * 2 * 10) / 10 : oneWayKm;
+    const cost = Math.round(totalKm * rate);
+
+    _distResult = { oneWayKm, totalKm, cost, rate, roundtrip,
+      label: `교통비 (${roundtrip ? '왕복 ' : '편도 '}${totalKm}km)` };
+
+    document.getElementById('dist-one-way').textContent = `${oneWayKm} km`;
+    document.getElementById('dist-total-label').textContent = roundtrip ? '왕복 거리' : '편도 거리';
+    document.getElementById('dist-total').textContent = `${totalKm} km`;
+    document.getElementById('dist-cost').textContent = won(cost);
+    document.getElementById('dist-route-info').textContent =
+      `${fromGeo.name} → ${toGeo.name} | 예상 소요 ${route.minutes}분 | 단가 ${won(rate)}/km`;
+    document.getElementById('dist-result-box').classList.add('visible');
+    document.getElementById('dist-add-btn').style.display = '';
+  } catch(e) {
+    errEl.textContent = '❌ ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📍 주행거리 계산';
+  }
+}
+
+function distCalcIfReady() {
+  if (_distResult) calcDist();
+}
+
+async function searchAddr(type) {
+  const inputId = type === 'from' ? 'dist-from' : 'dist-to';
+  const addr = document.getElementById(inputId).value.trim();
+  if (!addr) { alert('주소를 먼저 입력해 주세요.'); return; }
+  const errEl = document.getElementById('dist-error');
+  errEl.style.display = 'none';
+  try {
+    const geo = await geocodeAddr(addr);
+    document.getElementById(inputId).value = geo.name;
+    distResultReset();
+  } catch(e) {
+    errEl.textContent = '❌ ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+function addDistToExpense() {
+  if (!_distResult) return;
+  addExpenseRow(_distResult.label, _distResult.cost);
+  closeModal('dist-calc-modal');
+  calcPreview();
 }
 
 // ===== Init (Firebase 실시간 동기화) =====
