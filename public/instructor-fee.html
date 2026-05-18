@@ -1799,15 +1799,12 @@ function distResultReset() {
 }
 
 async function geocodeAddr(addr) {
-  // Nominatim (OpenStreetMap) — 무료, API 키 불필요, CORS 허용
-  const q = encodeURIComponent(addr + ' 대한민국');
-  const url = `https://nominatim.openstreetmap.org/search?q=${q}&countrycodes=kr&format=json&limit=1&accept-language=ko`;
-  const res = await fetch(url, { headers: { 'Accept-Language': 'ko' } });
-  if (!res.ok) throw new Error('주소 검색 오류: ' + res.status);
+  // /api/geocode — Vercel 서버 함수를 통해 카카오 Local API 호출 (CORS 문제 없음)
+  const url = `/api/geocode?addr=${encodeURIComponent(addr)}`;
+  const res = await fetch(url);
   const json = await res.json();
-  if (!json || json.length === 0) throw new Error(`주소를 찾을 수 없습니다: "${addr}"\n(예: 서울시 중구 세종대로 110, 정읍 농업기술센터)`);
-  const d = json[0];
-  return { lat: parseFloat(d.lat), lng: parseFloat(d.lon), name: d.display_name.split(',').slice(0,3).join(', ') };
+  if (!res.ok) throw new Error(json.error || '주소 검색 실패');
+  return { lat: json.lat, lng: json.lng, name: json.name };
 }
 
 async function getOSRMDistance(fromLat, fromLng, toLat, toLng) {
