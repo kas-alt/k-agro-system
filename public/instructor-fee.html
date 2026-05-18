@@ -1865,10 +1865,28 @@ function distCalcIfReady() {
   if (_distResult) calcDist();
 }
 
+function updateOrAddExpenseRow(keywords, newName, amount) {
+  // 기존 항목 중 keyword가 포함된 행이 있으면 이름·금액 업데이트, 없으면 새로 추가
+  const rows = document.querySelectorAll('#expense-list .expense-item');
+  for (const row of rows) {
+    const nameInput = row.querySelector('input[type=text]');
+    const amtInput = row.querySelector('input[type=number]');
+    if (keywords.some(kw => nameInput.value.includes(kw))) {
+      nameInput.value = newName;
+      amtInput.value = amount;
+      calcPreview();
+      return;
+    }
+  }
+  addExpenseRow(newName, amount);
+}
+
 function addDistToExpense() {
   if (!_distResult) return;
-  addExpenseRow(_distResult.fuelLabel, _distResult.fuelCost);
-  if (_distResult.tollFare > 0) addExpenseRow('고속도로 통행료', _distResult.tollFare);
+  updateOrAddExpenseRow(['기름값', '주유비'], _distResult.fuelLabel, _distResult.fuelCost);
+  if (_distResult.tollFare > 0) {
+    updateOrAddExpenseRow(['통행료', '고속도로'], '고속도로 통행료', _distResult.tollFare);
+  }
   closeModal('dist-calc-modal');
   calcPreview();
 }
